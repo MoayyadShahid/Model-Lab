@@ -1,0 +1,39 @@
+.loadingDots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #7A4BE3;
+  opacity: 0;
+}
+
+.dot:nth-child(1) {
+  animation: fadeInOut 1.4s infinite ease-in-out;
+}
+
+.dot:nth-child(2) {
+  animation: fadeInOut 1.4s 0.2s infinite ease-in-out;
+}
+
+.dot:nth-child(3) {
+  animation: fadeInOut 1.4s 0.4s infinite ease-in-out;
+}
+
+@keyframes fadeInOut {
+  0% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
