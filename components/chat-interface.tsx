@@ -4,6 +4,7 @@ import type React from "react"
 import Image from "next/image"
 
 import { useState } from "react"
+import type { Message } from "@/app/page"
 import { Send } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -64,17 +65,17 @@ export function ChatInterface({ chat, onUpdateChat }: ChatInterfaceProps) {
     return "Select Model"
   }
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!input.trim() || !chat) return
 
-    const newMessage = {
+    const userMessage: Message = {
       id: Date.now().toString(),
-      role: "user" as const,
+      role: "user",
       content: input,
       timestamp: new Date(),
     }
 
-    const updatedMessages = [...chat.messages, newMessage]
+    const updatedMessages = [...chat.messages, userMessage]
 
     // Update chat title if it's the first message
     const updates: Partial<Chat> = {
@@ -88,19 +89,74 @@ export function ChatInterface({ chat, onUpdateChat }: ChatInterfaceProps) {
     onUpdateChat(chat.id, updates)
     setInput("")
 
-    // Mock assistant response
-    setTimeout(() => {
-      const assistantMessage = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant" as const,
-        content:
-          "I understand your question. This is a mock response from the selected model. In the actual implementation, this would be a real response from the AI model.",
+    // Add loading message
+    const loadingMessage: Message = {
+      id: `loading-${Date.now()}`,
+      role: "assistant",
+      content: "Thinking...",
+      timestamp: new Date(),
+    }
+    
+    onUpdateChat(chat.id, {
+      messages: [...updatedMessages, loadingMessage]
+    })
+    
+    try {
+      // Format messages for the API
+      const messagesToSend = updatedMessages.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }))
+      
+      // Call the API
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          chat_id: chat.id,
+          messages: messagesToSend,
+          model: chat.model
+        }),
+      })
+      
+      if (!response.ok) {
+        throw new Error(`API returned ${response.status}`)
+      }
+      
+      const data = await response.json()
+      
+      // Create the assistant message with usage data
+      const assistantMessage: Message = {
+        id: Date.now().toString(),
+        role: "assistant",
+        content: data.message.content,
+        timestamp: new Date(),
+        usage: data.usage // Add the usage data from the API response
+      }
+      
+      // Replace the loading message with the actual response
+      const finalMessages = updatedMessages.concat(assistantMessage)
+      
+      onUpdateChat(chat.id, {
+        messages: finalMessages,
+      })
+    } catch (error) {
+      console.error("Error sending message:", error)
+      
+      // Replace loading message with error
+      const errorMessage: Message = {
+        id: Date.now().toString(),
+        role: "assistant",
+        content: `Sorry, there was an error processing your request: ${error instanceof Error ? error.message : 'Unknown error'}`,
         timestamp: new Date(),
       }
+      
       onUpdateChat(chat.id, {
-        messages: [...updatedMessages, assistantMessage],
+        messages: updatedMessages.concat(errorMessage),
       })
-    }, 1000)
+    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
     }
     
     const data = await response.json();
-    console.log("Response from backend:", data);
+    console.log("Response from backend:", JSON.stringify(data, null, 2));
     
     // Ensure the response has the expected structure
     if (!data.message || !data.message.content) {
