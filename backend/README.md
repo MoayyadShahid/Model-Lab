@@ -1,6 +1,6 @@
 # Model Lab Backend
 
-This is the Python backend for Model Lab, providing API endpoints for multiple LLM providers.
+This is the Python backend for Model Lab, providing API endpoints for multiple LLM providers through OpenRouter.
 
 ## Setup
 
@@ -53,8 +53,15 @@ This is the Python backend for Model Lab, providing API endpoints for multiple L
 Create a `.env` file in the backend directory with the following variables:
 
 ```
+# OpenRouter API Key (primary)
+OPENROUTER_API_KEY=your_openrouter_api_key
+
+# Optional: Fallback to OpenAI direct API if needed
 OPENAI_API_KEY=your_openai_api_key
-# Add other API keys as needed
+
+# App information (for OpenRouter dashboard)
+APP_URL=https://yourapplication.com
+APP_TITLE=Model Lab
 ```
 
 ## API Endpoints
@@ -62,20 +69,30 @@ OPENAI_API_KEY=your_openai_api_key
 - `POST /api/chat`: Send a chat request to the selected LLM model
 - `POST /api/chat/stream`: Stream a chat response from the selected LLM model
 
-## Adding New Models
+## Using OpenRouter Models
 
-To add support for a new LLM provider:
+OpenRouter gives you access to hundreds of AI models through a unified API. To use different models:
 
-1. Add the API key to your `.env` file
-2. Install the provider's Python SDK if needed
-3. Create a new module in `app/services/` for the provider
-4. Update the router to support the new model
+1. Specify the model in the request using the provider/model format:
+   - `openai/gpt-4o`
+   - `anthropic/claude-3-opus`
+   - `anthropic/claude-3-sonnet` 
+   - etc.
+
+2. For the full list of available models and their pricing, visit:
+   - [OpenRouter Models](https://openrouter.ai/models)
+   - [OpenRouter Pricing](https://openrouter.ai/pricing)
+
+No additional configuration is needed to use different models through OpenRouter.
 
 ## Testing
 
 ```bash
 poetry run pytest
 ```
+
+
+
 
 
 

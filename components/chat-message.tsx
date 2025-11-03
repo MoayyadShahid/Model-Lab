@@ -1,28 +1,7 @@
 import { User, Bot } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import ReactMarkdown from "react-markdown"
-
-interface Message {
-  id: string
-  role: "user" | "assistant"
-  content: string
-  timestamp: Date
-  usage?: {
-    prompt_tokens: number
-    completion_tokens: number
-    total_tokens: number
-    cost: {
-      input_cost_usd: number
-      output_cost_usd: number
-      total_cost_usd: number
-      pricing_rate: {
-        input: number
-        output: number
-      }
-    }
-    model: string
-  }
-}
+import type { Message } from "@/lib/types"
 
 interface ChatMessageProps {
   message: Message
@@ -33,7 +12,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
 
   return (
     <div className={`py-6 px-4 ${isUser ? "bg-gray-50" : "bg-white"}`}>
-      <div className="max-w-4xl mx-auto flex gap-4">
+      <div className="flex gap-4">
         <Avatar className="w-8 h-8 flex-shrink-0">
           <AvatarFallback className={isUser ? "bg-gray-600" : "bg-[#7A4BE3]"}>
             {isUser ? <User className="w-4 h-4 text-white" /> : <Bot className="w-4 h-4 text-white" />}
