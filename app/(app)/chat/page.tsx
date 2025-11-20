@@ -206,8 +206,8 @@ export default function ChatPage() {
   const activeChat = chats.find((chat) => chat.id === activeChatId);
 
   return (
-    <SidebarProvider defaultOpen={true}>
-      <div className="h-screen overflow-hidden">
+    <SidebarProvider defaultOpen={true} className="w-full">
+      <div className="h-screen overflow-hidden w-full flex-1 min-w-0">
         <ChatInterface 
           chat={activeChat}
           onUpdateChat={updateChat}

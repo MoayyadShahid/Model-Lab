@@ -159,3 +159,9 @@
 .sidebar-scroll::-webkit-scrollbar-thumb:hover {
   background: #d1d5db;
 }
+
+/* Ensure SidebarProvider wrapper fills full width */
+.group\/sidebar-wrapper {
+  width: 100% !important;
+  max-width: 100% !important;
+}
