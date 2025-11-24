@@ -11,11 +11,14 @@ export function ChatMessage({ message }: ChatMessageProps) {
   const isUser = message.role === "user"
 
   return (
-    <div className={`py-6 px-4 ${isUser ? "bg-gray-50" : "bg-white"}`}>
+    <div 
+      className={`py-6 px-4 ${isUser ? "rounded-lg" : "bg-white"}`}
+      style={isUser ? { backgroundColor: '#F6CEFC' } : undefined}
+    >
       <div className="flex gap-4">
         <Avatar className="w-8 h-8 flex-shrink-0">
-          <AvatarFallback className={isUser ? "bg-gray-600" : "bg-[#7A4BE3]"}>
-            {isUser ? <User className="w-4 h-4 text-white" /> : <Bot className="w-4 h-4 text-white" />}
+          <AvatarFallback className={isUser ? "bg-white border-2 border-black" : "bg-[#7A4BE3]"}>
+            {isUser ? <User className="w-4 h-4 text-black" /> : <Bot className="w-4 h-4 text-white" />}
           </AvatarFallback>
         </Avatar>
 
