@@ -6,11 +6,10 @@ const API_URL = 'http://localhost:8000';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    console.log("Frontend sending to backend:", body);
+    const { stream } = body;
     
     // Forward the request to the Python backend
-    console.log(`Sending request to ${API_URL}/api/chat`);
-    const response = await fetch(`${API_URL}/api/chat`, {
+    const backendResponse = await fetch(`${API_URL}/api/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -19,22 +18,64 @@ export async function POST(request: NextRequest) {
       cache: 'no-store',
     });
     
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`Backend returned error ${response.status}:`, errorText);
-      throw new Error(`Backend error: ${response.status} ${errorText}`);
+    if (!backendResponse.ok) {
+      const errorText = await backendResponse.text();
+      console.error(`Backend returned error ${backendResponse.status}:`, errorText);
+      throw new Error(`Backend error: ${backendResponse.status} ${errorText}`);
     }
     
-    const data = await response.json();
-    console.log("Response from backend:", JSON.stringify(data, null, 2));
-    
-    // Ensure the response has the expected structure
-    if (!data.message || !data.message.content) {
-      console.error("Backend response missing message.content:", data);
-      throw new Error("Invalid response format from backend");
+    // Check if streaming response
+    const contentType = backendResponse.headers.get('content-type');
+    if (stream === true && contentType?.includes('text/event-stream')) {
+      // Forward the stream
+      const stream = new ReadableStream({
+        async start(controller) {
+          const reader = backendResponse.body?.getReader();
+          const decoder = new TextDecoder();
+          
+          if (!reader) {
+            controller.close();
+            return;
+          }
+          
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              
+              if (done) {
+                controller.close();
+                break;
+              }
+              
+              controller.enqueue(value);
+            }
+          } catch (error) {
+            console.error('Error reading stream:', error);
+            controller.error(error);
+          }
+        },
+      });
+      
+      return new Response(stream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+          'X-Accel-Buffering': 'no',
+        },
+      });
+    } else {
+      // Non-streaming response
+      const data = await backendResponse.json();
+      
+      // Ensure the response has the expected structure
+      if (!data.message || !data.message.content) {
+        console.error("Backend response missing message.content:", data);
+        throw new Error("Invalid response format from backend");
+      }
+      
+      return NextResponse.json(data);
     }
-    
-    return NextResponse.json(data);
   } catch (error) {
     console.error('Error calling backend:', error);
     return NextResponse.json(

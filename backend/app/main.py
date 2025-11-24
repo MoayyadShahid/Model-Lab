@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
@@ -156,6 +157,7 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     messages: List[ChatMessage]
     model: Optional[str] = "openai/gpt-4o-mini"
+    stream: Optional[bool] = False
 
 class ChatResponse(BaseModel):
     role: str
@@ -270,8 +272,160 @@ async def get_pricing():
         "source": "These rates are based on default values or environment variables. Check OpenRouter's pricing page for the most up-to-date rates: https://openrouter.ai/pricing"
     }
 
+def normalize_model_name(model: str) -> str:
+    """Normalize model name to OpenRouter format"""
+    model_lower = model.lower()
+    
+    # Anthropic models
+    if model_lower in ["claude-3.5-sonnet", "claude-3-5-sonnet", "claude-3.5", "claude3.5", "claude3.5-sonnet"]:
+        return "anthropic/claude-3.5-sonnet"
+    elif model_lower in ["claude-3-opus", "claude3-opus", "claude3opus", "claude-opus"]:
+        return "anthropic/claude-3-opus"
+    elif model_lower in ["claude-3-sonnet", "claude3-sonnet", "claude3sonnet", "claude-sonnet"]:
+        return "anthropic/claude-3-sonnet"
+    elif model_lower in ["claude-3-haiku", "claude3-haiku", "claude3haiku", "claude-haiku"]:
+        return "anthropic/claude-3-haiku"
+    
+    # DeepSeek models
+    elif model_lower in ["deepseek", "deepseek-chat", "deepseek-llm"]:
+        return "deepseek/deepseek-v3.2-exp"
+    elif model_lower in ["deepseek-coder", "deepseekcoder"]:
+        return "deepseek/deepseek-chat-v3.1:free"
+    
+    # OpenAI models
+    elif model_lower in ["gpt4o", "4o"]:
+        return "openai/gpt-4o"
+    elif model_lower in ["gpt4o-mini", "4o-mini"]:
+        return "openai/gpt-4o-mini"
+    elif model_lower in ["gpt-4-vision", "gpt4vision"]:
+        return "openai/gpt-4-vision-preview"
+    
+    # Default case - if no special mapping and no provider prefix
+    elif not ('/' in model):
+        return f"openai/{model}"
+    
+    return model
+
+async def stream_chat_generator(request: ChatRequest):
+    """Generator function for streaming chat responses"""
+    try:
+        if not request.messages:
+            yield f"data: {json.dumps({'error': 'No messages provided'})}\n\n"
+            return
+        
+        # Convert messages to the format expected by OpenAI
+        formatted_messages = [{"role": msg.role, "content": msg.content} for msg in request.messages]
+        
+        # Normalize model name
+        model = normalize_model_name(request.model)
+        
+        # Use direct API calls to OpenRouter
+        api_key = os.getenv("OPENROUTER_API_KEY")
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+            "HTTP-Referer": os.getenv("APP_URL", "https://modellab.com"),
+            "X-Title": os.getenv("APP_TITLE", "Model Lab")
+        }
+        
+        payload = {
+            "model": model,
+            "messages": formatted_messages,
+            "stream": True
+        }
+        
+        try:
+            # Make streaming request to OpenRouter
+            api_response = requests.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers=headers,
+                json=payload,
+                stream=True
+            )
+            
+            if api_response.status_code != 200:
+                error_text = api_response.text
+                yield f"data: {json.dumps({'error': f'OpenRouter API returned status code {api_response.status_code}: {error_text}'})}\n\n"
+                return
+            
+            # Track usage data
+            usage_data = {}
+            
+            # Stream the response
+            for line in api_response.iter_lines():
+                if line:
+                    line_text = line.decode('utf-8')
+                    
+                    # Skip non-data lines
+                    if not line_text.startswith('data: '):
+                        continue
+                    
+                    # Extract JSON data
+                    data_str = line_text[6:]  # Remove 'data: ' prefix
+                    
+                    # Check for [DONE] marker
+                    if data_str.strip() == '[DONE]':
+                        # Send final usage message if available
+                        if usage_data:
+                            final_usage = {
+                                "type": "usage",
+                                "usage": {
+                                    "prompt_tokens": usage_data.get("prompt_tokens", 0),
+                                    "completion_tokens": usage_data.get("completion_tokens", 0),
+                                    "total_tokens": usage_data.get("total_tokens", 0),
+                                    "model": request.model,
+                                    "cost": calculate_cost(request.model, usage_data.get("prompt_tokens", 0), usage_data.get("completion_tokens", 0))
+                                }
+                            }
+                            yield f"data: {json.dumps(final_usage)}\n\n"
+                        yield f"data: [DONE]\n\n"
+                        break
+                    
+                    try:
+                        chunk_data = json.loads(data_str)
+                        choices = chunk_data.get("choices", [])
+                        
+                        if choices and len(choices) > 0:
+                            delta = choices[0].get("delta", {})
+                            content_delta = delta.get("content", "")
+                            
+                            if content_delta:
+                                # Send content chunk
+                                yield f"data: {json.dumps({'type': 'content', 'content': content_delta})}\n\n"
+                            
+                            # Check for usage data (usually in final chunk)
+                            if "usage" in chunk_data:
+                                usage_data = chunk_data["usage"]
+                    
+                    except json.JSONDecodeError:
+                        # Skip invalid JSON
+                        continue
+        
+        except Exception as e:
+            error_msg = f"Error calling OpenRouter API: {str(e)}"
+            print(error_msg)
+            yield f"data: {json.dumps({'error': error_msg})}\n\n"
+    
+    except Exception as e:
+        error_msg = f"Error processing request: {str(e)}"
+        print(error_msg)
+        yield f"data: {json.dumps({'error': error_msg})}\n\n"
+
 @app.post("/api/chat")
 async def chat(request: ChatRequest):
+    # Handle streaming requests
+    if request.stream:
+        return StreamingResponse(
+            stream_chat_generator(request),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no"
+            }
+        )
+    
+    # Non-streaming request (original logic)
     try:
         if not request.messages:
             raise HTTPException(status_code=400, detail="No messages provided")
@@ -279,123 +433,87 @@ async def chat(request: ChatRequest):
         # Convert messages to the format expected by OpenAI
         formatted_messages = [{"role": msg.role, "content": msg.content} for msg in request.messages]
         
-        # Call OpenRouter API
-        try:
-            # Adjust model name format if needed
-            model = request.model
-            
-            # Handle model name mapping for special cases
-            # Anthropic models
-            if model.lower() in ["claude-3.5-sonnet", "claude-3-5-sonnet", "claude-3.5", "claude3.5", "claude3.5-sonnet"]:
-                model = "anthropic/claude-3.5-sonnet"  # Note: OpenRouter uses the dash format
-            elif model.lower() in ["claude-3-opus", "claude3-opus", "claude3opus", "claude-opus"]:
-                model = "anthropic/claude-3-opus"
-            elif model.lower() in ["claude-3-sonnet", "claude3-sonnet", "claude3sonnet", "claude-sonnet"]:
-                model = "anthropic/claude-3-sonnet"
-            elif model.lower() in ["claude-3-haiku", "claude3-haiku", "claude3haiku", "claude-haiku"]:
-                model = "anthropic/claude-3-haiku"
-            
-            # DeepSeek models
-            elif model.lower() in ["deepseek", "deepseek-chat", "deepseek-llm"]:
-                model = "deepseek/deepseek-v3.2-exp"
-            elif model.lower() in ["deepseek-coder", "deepseekcoder"]:
-                model = "deepseek/deepseek-chat-v3.1:free"
+        # Normalize model name
+        model = normalize_model_name(request.model)
                 
-            # OpenAI models - convenience aliases and mappings
-            # GPT-4o series
-            elif model.lower() in ["gpt4o", "4o"]:
-                model = "openai/gpt-4o"
-            elif model.lower() in ["gpt4o-mini", "4o-mini"]:
-                model = "openai/gpt-4o-mini"
-            elif model.lower() in ["gpt-4-vision", "gpt4vision"]:
-                model = "openai/gpt-4-vision-preview"
+        # Use direct API calls to OpenRouter instead of OpenAI SDK
+        api_key = os.getenv("OPENROUTER_API_KEY")
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+            "HTTP-Referer": os.getenv("APP_URL", "https://modellab.com"),
+            "X-Title": os.getenv("APP_TITLE", "Model Lab")
+        }
+        
+        payload = {
+            "model": model,
+            "messages": formatted_messages
+        }
+        
+        api_response = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers=headers,
+            data=json.dumps(payload)
+        )
+        
+        if api_response.status_code != 200:
+            raise ValueError(f"OpenRouter API returned status code {api_response.status_code}: {api_response.text}")
+        
+        # Parse the JSON response
+        response_json = api_response.json()
+        
+        # Extract the response content
+        choices = response_json.get("choices", [])
+        if not choices or len(choices) == 0:
+            raise ValueError("No choices in OpenRouter response")
             
-            # Default case - if no special mapping and no provider prefix
-            elif not ('/' in model):
-                # Default to OpenAI for models without a provider prefix
-                model = f"openai/{model}"
-                
-            # Use direct API calls to OpenRouter instead of OpenAI SDK
-            api_key = os.getenv("OPENROUTER_API_KEY")
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {api_key}",
-                "HTTP-Referer": os.getenv("APP_URL", "https://modellab.com"),
-                "X-Title": os.getenv("APP_TITLE", "Model Lab")
+        message = choices[0].get("message", {})
+        response_content = message.get("content", "No content received")
+        
+        # Extract usage statistics
+        usage_data = response_json.get("usage", {})
+        prompt_tokens = usage_data.get("prompt_tokens", 0)
+        completion_tokens = usage_data.get("completion_tokens", 0)
+        total_tokens = usage_data.get("total_tokens", 0)
+        
+        # Calculate cost (rates as of 2025, subject to change)
+        cost_info = calculate_cost(request.model, prompt_tokens, completion_tokens)
+        
+        # Return in the format expected by the frontend with additional metadata
+        return {
+            "message": {
+                "role": "assistant",
+                "content": response_content
+            },
+            "usage": {
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": total_tokens,
+                "model": request.model,
+                "cost": cost_info
             }
-            
-            payload = {
-                "model": model,
-                "messages": formatted_messages
-            }
-            
-            api_response = requests.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers=headers,
-                data=json.dumps(payload)
-            )
-            
-            if api_response.status_code != 200:
-                raise ValueError(f"OpenRouter API returned status code {api_response.status_code}: {api_response.text}")
-            
-            # Parse the JSON response
-            response_json = api_response.json()
-            
-            # Extract the response content
-            choices = response_json.get("choices", [])
-            if not choices or len(choices) == 0:
-                raise ValueError("No choices in OpenRouter response")
-                
-            message = choices[0].get("message", {})
-            response_content = message.get("content", "No content received")
-            
-            # Extract usage statistics
-            usage_data = response_json.get("usage", {})
-            prompt_tokens = usage_data.get("prompt_tokens", 0)
-            completion_tokens = usage_data.get("completion_tokens", 0)
-            total_tokens = usage_data.get("total_tokens", 0)
-            
-            # Calculate cost (rates as of 2025, subject to change)
-            cost_info = calculate_cost(request.model, prompt_tokens, completion_tokens)
-            
-            # Return in the format expected by the frontend with additional metadata
-            return {
-                "message": {
-                    "role": "assistant",
-                    "content": response_content
-                },
-                "usage": {
-                    "prompt_tokens": prompt_tokens,
-                    "completion_tokens": completion_tokens,
-                    "total_tokens": total_tokens,
-                    "model": request.model,
-                    "cost": cost_info
-                }
-            }
-        except Exception as e:
-            # If OpenRouter API fails, provide a fallback response
-            print(f"Error calling OpenRouter API: {str(e)}")
-            print(f"Response type: {type(e).__name__}")
-            print(f"Response: {str(e)}")
-            return {
-                "message": {
-                    "role": "assistant",
-                    "content": f"Sorry, there was an error processing your request: {str(e)}"
-                },
-                "usage": {
-                    "prompt_tokens": 0,
-                    "completion_tokens": 0,
-                    "total_tokens": 0,
-                    "model": request.model,
-                    "cost": {
-                        "input_cost_usd": 0,
-                        "output_cost_usd": 0,
-                        "total_cost_usd": 0,
-                        "pricing_rate": {"input": 0, "output": 0}
-                    },
-                    "error": str(e)
-                }
-            }
-            
+        }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # If OpenRouter API fails, provide a fallback response
+        print(f"Error calling OpenRouter API: {str(e)}")
+        print(f"Response type: {type(e).__name__}")
+        print(f"Response: {str(e)}")
+        return {
+            "message": {
+                "role": "assistant",
+                "content": f"Sorry, there was an error processing your request: {str(e)}"
+            },
+            "usage": {
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "model": request.model,
+                "cost": {
+                    "input_cost_usd": 0,
+                    "output_cost_usd": 0,
+                    "total_cost_usd": 0,
+                    "pricing_rate": {"input": 0, "output": 0}
+                },
+                "error": str(e)
+            }
+        }

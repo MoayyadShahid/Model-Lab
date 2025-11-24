@@ -2,6 +2,7 @@ import { User, Bot } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import ReactMarkdown from "react-markdown"
 import type { Message } from "@/lib/types"
+import { LoadingDots } from "@/components/loading-dots"
 
 interface ChatMessageProps {
   message: Message
@@ -11,11 +12,14 @@ export function ChatMessage({ message }: ChatMessageProps) {
   const isUser = message.role === "user"
 
   return (
-    <div className={`py-6 px-4 ${isUser ? "bg-gray-50" : "bg-white"}`}>
+    <div 
+      className={`py-6 px-4 ${isUser ? "rounded-lg" : "bg-white"}`}
+      style={isUser ? { backgroundColor: '#F6CEFC' } : undefined}
+    >
       <div className="flex gap-4">
         <Avatar className="w-8 h-8 flex-shrink-0">
-          <AvatarFallback className={isUser ? "bg-gray-600" : "bg-[#7A4BE3]"}>
-            {isUser ? <User className="w-4 h-4 text-white" /> : <Bot className="w-4 h-4 text-white" />}
+          <AvatarFallback className={isUser ? "bg-white border-2 border-black" : "bg-[#7A4BE3]"}>
+            {isUser ? <User className="w-4 h-4 text-black" /> : <Bot className="w-4 h-4 text-white" />}
           </AvatarFallback>
         </Avatar>
 
@@ -33,6 +37,10 @@ export function ChatMessage({ message }: ChatMessageProps) {
           <div className="prose prose-sm max-w-none text-gray-900 break-words" style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
             {isUser ? (
               <p className="whitespace-pre-wrap break-words" style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{message.content}</p>
+            ) : message.content === "__LOADING__" ? (
+              <div className="py-2">
+                <LoadingDots />
+              </div>
             ) : (
               <>
                 <ReactMarkdown

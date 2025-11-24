@@ -157,6 +157,7 @@ export function ChatInterface({
   const [isLoading, setIsLoading] = useState(false)
   const [welcomeMessage] = useState<string>(welcomeMessages[Math.floor(Math.random() * welcomeMessages.length)])
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const loadingMessageIdRef = useRef<string | null>(null)
   const { state: sidebarState, toggleSidebar } = useSidebar()
   const sidebarVisible = sidebarState === "expanded"
 
@@ -196,10 +197,12 @@ export function ChatInterface({
     setInput("")
 
     // Add loading message
+    const loadingMessageId = `loading-${Date.now()}`
+    loadingMessageIdRef.current = loadingMessageId
     const loadingMessage: Message = {
-      id: `loading-${Date.now()}`,
+      id: loadingMessageId,
       role: "assistant",
-      content: "Thinking...",
+      content: "__LOADING__", // Special marker for loading state
       timestamp: new Date(),
     }
     
@@ -211,13 +214,15 @@ export function ChatInterface({
       // Set loading state
       setIsLoading(true)
       
-      // Format messages for the API
-      const messagesToSend = updatedMessages.map(msg => ({
-        role: msg.role,
-        content: msg.content
-      }))
+      // Format messages for the API (exclude loading markers)
+      const messagesToSend = updatedMessages
+        .filter(msg => msg.content !== "__LOADING__")
+        .map(msg => ({
+          role: msg.role,
+          content: msg.content
+        }))
       
-      // Call the API
+      // Call the streaming API
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
@@ -226,7 +231,8 @@ export function ChatInterface({
         body: JSON.stringify({
           chat_id: chat.id,
           messages: messagesToSend,
-          model: chat.model
+          model: chat.model,
+          stream: true
         }),
       })
       
@@ -234,27 +240,116 @@ export function ChatInterface({
         throw new Error(`API returned ${response.status}`)
       }
       
-      const data = await response.json()
-      
-      // Create the assistant message with usage data
-      const assistantMessage: Message = {
-        id: Date.now().toString(),
-        role: "assistant",
-        content: data.message.content,
-        timestamp: new Date(),
-        usage: data.usage // Add the usage data from the API response
+      // Check if response is streaming
+      const contentType = response.headers.get('content-type')
+      if (contentType?.includes('text/event-stream')) {
+        // Handle streaming response
+        const reader = response.body?.getReader()
+        const decoder = new TextDecoder()
+        
+        if (!reader) {
+          throw new Error('No response body')
+        }
+        
+        // Capture initial messages state (before loading message was added)
+        const initialMessages = updatedMessages
+        let buffer = ''
+        let accumulatedContent = ''
+        let usageData: any = null
+        
+        while (true) {
+          const { done, value } = await reader.read()
+          
+          if (done) break
+          
+          // Decode the chunk
+          buffer += decoder.decode(value, { stream: true })
+          
+          // Process complete SSE messages (lines ending with \n\n)
+          const lines = buffer.split('\n\n')
+          buffer = lines.pop() || '' // Keep incomplete line in buffer
+          
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const dataStr = line.slice(6) // Remove 'data: ' prefix
+              
+              if (dataStr.trim() === '[DONE]') {
+                continue
+              }
+              
+              try {
+                const data = JSON.parse(dataStr)
+                
+                if (data.error) {
+                  throw new Error(data.error)
+                }
+                
+                if (data.type === 'content' && data.content) {
+                  // Accumulate content
+                  accumulatedContent += data.content
+                  
+                  // Update the loading message with accumulated content
+                  // Build messages array from initial state + updated loading message
+                  const updatedLoadingMessage: Message = {
+                    ...loadingMessage,
+                    content: accumulatedContent
+                  }
+                  
+                  onUpdateChat(chat.id, {
+                    messages: [...initialMessages, updatedLoadingMessage]
+                  })
+                } else if (data.type === 'usage' && data.usage) {
+                  // Store usage data for final message
+                  usageData = data.usage
+                }
+              } catch (parseError) {
+                // Skip invalid JSON
+                console.warn('Failed to parse SSE data:', parseError)
+              }
+            }
+          }
+        }
+        
+        // Replace loading message with final message
+        const finalMessage: Message = {
+          id: Date.now().toString(),
+          role: "assistant",
+          content: accumulatedContent || "No response received",
+          timestamp: new Date(),
+          usage: usageData || undefined
+        }
+        
+        loadingMessageIdRef.current = null
+        
+        onUpdateChat(chat.id, {
+          messages: [...initialMessages, finalMessage]
+        })
+      } else {
+        // Fallback to non-streaming response
+        const data = await response.json()
+        
+        // Create the assistant message with usage data
+        const assistantMessage: Message = {
+          id: Date.now().toString(),
+          role: "assistant",
+          content: data.message.content,
+          timestamp: new Date(),
+          usage: data.usage
+        }
+        
+        // Replace the loading message with the actual response
+        // Use initialMessages (before loading was added)
+        loadingMessageIdRef.current = null
+        
+        onUpdateChat(chat.id, {
+          messages: [...updatedMessages, assistantMessage]
+        })
       }
-      
-      // Replace the loading message with the actual response
-      const finalMessages = updatedMessages.concat(assistantMessage)
-      
-      onUpdateChat(chat.id, {
-        messages: finalMessages,
-      })
     } catch (error) {
       console.error("Error sending message:", error)
       
       // Replace loading message with error
+      // Use updatedMessages (before loading was added)
       const errorMessage: Message = {
         id: Date.now().toString(),
         role: "assistant",
@@ -262,8 +357,10 @@ export function ChatInterface({
         timestamp: new Date(),
       }
       
+      loadingMessageIdRef.current = null
+      
       onUpdateChat(chat.id, {
-        messages: updatedMessages.concat(errorMessage),
+        messages: [...updatedMessages, errorMessage]
       })
     } finally {
       setIsLoading(false)
@@ -594,12 +691,6 @@ export function ChatInterface({
                 {chat.messages.map(message => (
                   <ChatMessage key={message.id} message={message} />
                 ))}
-                {isLoading && (
-                  <div className="px-4 mb-10 flex items-center">
-                    <div className="text-sm text-gray-500 mr-2">Katalyst is thinking</div>
-                    <LoadingDots />
-                  </div>
-                )}
               </>
             ) : (
               <div className="flex items-center justify-center h-full w-full absolute top-0 left-0">
