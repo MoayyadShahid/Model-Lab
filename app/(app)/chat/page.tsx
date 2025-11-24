@@ -45,16 +45,8 @@ export default function ChatPage() {
       
       if (chatsError) throw chatsError;
       
-      if (!chatsData || chatsData.length === 0) {
-        // Create a default chat if none exists
-        const newChat = await createNewChat(userId);
-        setChats([newChat]);
-        setActiveChatId(newChat.id);
-        return;
-      }
-      
-      // For each chat, load its messages
-      const chatsWithMessages = await Promise.all(
+      // Load existing chats with their messages (for sidebar)
+      const chatsWithMessages = chatsData ? await Promise.all(
         chatsData.map(async (chat) => {
           const { data: messagesData } = await supabase
             .from('messages')
@@ -76,10 +68,34 @@ export default function ChatPage() {
             }))
           };
         })
-      );
+      ) : [];
       
-      setChats(chatsWithMessages);
-      setActiveChatId(chatsWithMessages[0]?.id || null);
+      // ALWAYS create a fresh new chat when signing in
+      const newChatData = {
+        user_id: userId,
+        title: "New Chat",
+        model: "openai/gpt-4o"
+      };
+      
+      const { data: chat, error: chatError } = await supabase
+        .from('chats')
+        .insert(newChatData)
+        .select()
+        .single();
+      
+      if (chatError) throw chatError;
+      
+      const newChat: Chat = {
+        id: chat.id,
+        title: chat.title,
+        model: chat.model,
+        createdAt: new Date(chat.created_at),
+        messages: []
+      };
+      
+      // Set chats with existing chats + new chat at the front
+      setChats([newChat, ...chatsWithMessages]);
+      setActiveChatId(newChat.id);
     } catch (error) {
       console.error("Error loading chats:", error);
       // Handle error appropriately
@@ -133,22 +149,98 @@ export default function ChatPage() {
       
       // If there are message updates, handle them
       if (updates.messages) {
-        // Get the last message if it's new
+        // Filter out loading messages - they should NEVER be saved to database
+        const finalMessages = updates.messages.filter(
+          msg => msg.content !== "__LOADING__" && !msg.id.startsWith('loading-')
+        );
+        
+        // Get current messages from state to compare
         const chat = chats.find(c => c.id === chatId);
         const currentMessages = chat?.messages || [];
-        const newMessages = updates.messages.slice(currentMessages.length);
         
-        // Add any new messages to the database
+        // Find messages that are actually new (not in current state)
+        const currentMessageIds = new Set(currentMessages.map(m => m.id));
+        const newMessages = finalMessages.filter(msg => !currentMessageIds.has(msg.id));
+        
+        // Also check for messages that were updated (same ID, different content)
+        // This handles the case where a loading message is replaced with final content
+        const updatedMessages = finalMessages.filter(msg => {
+          const existingMsg = currentMessages.find(m => m.id === msg.id);
+          return existingMsg && existingMsg.content !== msg.content;
+        });
+        
+        // Save new messages to database
         for (const message of newMessages) {
-          await supabase
+          // Check if message already exists in database (prevent duplicates)
+          const messageTime = new Date(message.timestamp);
+          const timeStart = new Date(messageTime.getTime() - 2000);
+          const timeEnd = new Date(messageTime.getTime() + 2000);
+          
+          const { data: existingMessages } = await supabase
             .from('messages')
-            .insert({
-              chat_id: chatId,
-              role: message.role,
-              content: message.content,
-              created_at: message.timestamp.toISOString(),
-              usage: message.usage || null
-            });
+            .select('id')
+            .eq('chat_id', chatId)
+            .eq('role', message.role)
+            .eq('content', message.content)
+            .gte('created_at', timeStart.toISOString())
+            .lte('created_at', timeEnd.toISOString())
+            .limit(1);
+          
+          // Only insert if it doesn't already exist
+          if (!existingMessages || existingMessages.length === 0) {
+            await supabase
+              .from('messages')
+              .insert({
+                chat_id: chatId,
+                role: message.role,
+                content: message.content,
+                created_at: message.timestamp.toISOString(),
+                usage: message.usage || null
+              });
+          }
+        }
+        
+        // Update messages that changed (e.g., loading -> final content)
+        for (const message of updatedMessages) {
+          const existingMsg = currentMessages.find(m => m.id === message.id);
+          
+          // Only update if the existing message was a loading message or content actually changed
+          if (existingMsg && (
+            existingMsg.content === "__LOADING__" || 
+            existingMsg.id.startsWith('loading-') ||
+            existingMsg.content !== message.content
+          )) {
+            // Check if this message exists in DB (it might not if it was only a loading state)
+            const { data: dbMessage } = await supabase
+              .from('messages')
+              .select('id')
+              .eq('chat_id', chatId)
+              .eq('role', message.role)
+              .eq('content', existingMsg.content)
+              .limit(1);
+            
+            if (dbMessage && dbMessage.length > 0) {
+              // Update existing message
+              await supabase
+                .from('messages')
+                .update({
+                  content: message.content,
+                  usage: message.usage || null
+                })
+                .eq('id', dbMessage[0].id);
+            } else {
+              // Insert as new message (loading message was never saved)
+              await supabase
+                .from('messages')
+                .insert({
+                  chat_id: chatId,
+                  role: message.role,
+                  content: message.content,
+                  created_at: message.timestamp.toISOString(),
+                  usage: message.usage || null
+                });
+            }
+          }
         }
       }
       
