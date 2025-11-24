@@ -42,6 +42,98 @@ const welcomeMessages = [
   "How can I make your day easier?"
 ]
 
+// Helper function to get display name for models
+const getModelDisplayName = (modelId: string): string => {
+  const modelNames: Record<string, string> = {
+    // OpenAI GPT-5 Series
+    "openai/gpt-5.1": "GPT-5.1",
+    "openai/gpt-5.1-chat": "GPT-5.1 Chat",
+    "openai/gpt-5.1-codex": "GPT-5.1 Codex",
+    "openai/gpt-5.1-codex-mini": "GPT-5.1 Codex Mini",
+    "openai/gpt-5-codex": "GPT-5 Codex",
+    "openai/gpt-5-chat": "GPT-5 Chat",
+    "openai/gpt-5": "GPT-5",
+    "openai/gpt-5-mini": "GPT-5 Mini",
+    "openai/gpt-5-nano": "GPT-5 Nano",
+    
+    // OpenAI o-Series (Reasoning Models)
+    "openai/o4-mini-deep-research": "o4 Mini Deep Research",
+    "openai/o3": "o3",
+    "openai/o4-mini": "o4 Mini",
+    "openai/o3-mini-high": "o3 Mini High",
+    "openai/o3-mini": "o3 Mini",
+    "openai/o1": "o1",
+    
+
+    // OpenAI GPT-4.1 Series
+    "openai/gpt-4.1": "GPT-4.1",
+    "openai/gpt-4.1-mini": "GPT-4.1 Mini",
+    "openai/gpt-4.1-nano": "GPT-4.1 Nano",
+    
+    // OpenAI GPT-4o Series
+    "openai/gpt-4o-mini": "GPT-4o Mini",
+    "openai/gpt-4o": "GPT-4o",
+    
+    // OpenAI GPT-4 Series
+    "openai/gpt-4": "GPT-4",
+    
+    // OpenAI GPT OSS Series
+    "openai/gpt-oss-120b": "GPT OSS 120B",
+    "openai/gpt-oss-20b:free": "GPT OSS 20B (Free)",
+    "openai/gpt-oss-20b": "GPT OSS 20B",
+    
+    // Anthropic Claude Models
+    "anthropic/claude-sonnet-4.5": "Claude Sonnet 4.5",
+    "anthropic/claude-sonnet-4": "Claude Sonnet 4",
+    "anthropic/claude-haiku-4.5": "Claude Haiku 4.5",
+    "anthropic/claude-3.7-sonnet": "Claude 3.7 Sonnet",
+    "anthropic/claude-3.5-haiku": "Claude 3.5 Haiku",
+    "anthropic/claude-opus-4.1": "Claude Opus 4.1",
+    "anthropic/claude-3.5-sonnet": "Claude 3.5 Sonnet",
+    "anthropic/claude-3.7-sonnet:thinking": "Claude 3.7 Sonnet (Thinking)",
+    "anthropic/claude-opus-4": "Claude Opus 4",
+    "anthropic/claude-3-opus": "Claude 3 Opus",
+    "anthropic/claude-3-sonnet": "Claude 3 Sonnet",
+    "anthropic/claude-3-haiku": "Claude 3 Haiku",
+    
+    // DeepSeek Models
+    "deepseek/deepseek-chat-v3-0324": "DeepSeek V3 0324",
+    "deepseek/deepseek-chat-v3.1": "DeepSeek V3.1",
+    "tngtech/deepseek-r1t2-chimera:free": "DeepSeek R1T2 Chimera (Free)",
+    "deepseek/deepseek-v3.2-exp": "DeepSeek V3.2 Exp",
+    "deepseek/deepseek-v3.1-terminus": "DeepSeek V3.1 Terminus",
+    "deepseek/deepseek-r1-0528": "DeepSeek R1 0528",
+    "tngtech/deepseek-r1t-chimera:free": "DeepSeek R1T Chimera (Free)",
+    "deepseek/deepseek-chat": "DeepSeek V3",
+    "deepseek/deepseek-chat-v3-0324:free": "DeepSeek V3 0324 (Free)",
+    "tngtech/deepseek-r1t2-chimera": "DeepSeek R1T2 Chimera",
+    "deepseek/deepseek-r1-0528:free": "DeepSeek R1 0528 (Free)",
+    "deepseek/deepseek-r1": "DeepSeek R1",
+    "deepseek/deepseek-r1:free": "DeepSeek R1 (Free)",
+    
+    // Legacy mappings without provider prefix
+    "gpt-4o": "GPT-4o",
+    "gpt-4o-mini": "GPT-4o Mini",
+    "claude-3-5-sonnet": "Claude 3.5 Sonnet",
+    "claude-3-opus": "Claude 3 Opus",
+    "deepseek-chat": "DeepSeek Chat",
+  }
+  
+  return modelNames[modelId] || modelId
+}
+
+// Helper function to get model color
+const getModelColor = (modelId: string): string => {
+  if (modelId.includes("gpt") || modelId.includes("openai") || modelId.startsWith("o")) {
+    return "green"
+  } else if (modelId.includes("claude")) {
+    return "amber"
+  } else if (modelId.includes("deepseek")) {
+    return "blue"
+  }
+  return "gray"
+}
+
 interface ChatInterfaceProps {
   chat?: Chat
   onUpdateChat: (chatId: string, updates: Partial<Chat>) => void
@@ -261,24 +353,19 @@ export function ChatInterface({
                       {chatItem.messages[0]?.content || "Start a new conversation..."}
                     </p>
                     <span className={`text-xs px-2 py-1 rounded-full font-medium flex items-center gap-1 min-w-[120px] max-w-full justify-start
-                      ${chatItem.model.startsWith("gpt") ? "bg-green-100 text-green-700" :
-                        chatItem.model.startsWith("claude") ? "bg-amber-100 text-amber-700" :
-                        chatItem.model.startsWith("deepseek") ? "bg-blue-100 text-blue-700" :
+                      ${getModelColor(chatItem.model) === "green" ? "bg-green-100 text-green-700" :
+                        getModelColor(chatItem.model) === "amber" ? "bg-amber-100 text-amber-700" :
+                        getModelColor(chatItem.model) === "blue" ? "bg-blue-100 text-blue-700" :
                         "bg-gray-100 text-gray-700"
                       }`}>
                       <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0
-                        ${chatItem.model.startsWith("gpt") ? "bg-green-500" :
-                          chatItem.model.startsWith("claude") ? "bg-amber-500" :
-                          chatItem.model.startsWith("deepseek") ? "bg-blue-500" :
+                        ${getModelColor(chatItem.model) === "green" ? "bg-green-500" :
+                          getModelColor(chatItem.model) === "amber" ? "bg-amber-500" :
+                          getModelColor(chatItem.model) === "blue" ? "bg-blue-500" :
                           "bg-gray-400"
                         }`} />
                       <span className="truncate">
-                        {chatItem.model === "gpt-4o" ? "GPT-4o" : 
-                         chatItem.model === "gpt-4o-mini" ? "GPT-4o Mini" : 
-                         chatItem.model === "claude-3-5-sonnet" ? "Claude 3.5 Sonnet" :
-                         chatItem.model === "claude-3-opus" ? "Claude 3 Opus" :
-                         chatItem.model === "deepseek-chat" ? "DeepSeek Chat" :
-                         chatItem.model}
+                        {getModelDisplayName(chatItem.model)}
                       </span>
                     </span>
                   </div>
@@ -361,9 +448,9 @@ export function ChatInterface({
                 <SelectTrigger className="w-48 bg-transparent border-gray-300">
                   <div className="flex items-center gap-2">
                     <div className={`w-2 h-2 rounded-full ${
-                      chat.model.startsWith("gpt") ? "bg-green-500" :
-                      chat.model.startsWith("claude") ? "bg-amber-500" :
-                      chat.model.startsWith("deepseek") ? "bg-blue-500" :
+                      getModelColor(chat.model) === "green" ? "bg-green-500" :
+                      getModelColor(chat.model) === "amber" ? "bg-amber-500" :
+                      getModelColor(chat.model) === "blue" ? "bg-blue-500" :
                       "bg-gray-400"
                     }`} />
                     <SelectValue placeholder="Select a model" />
@@ -373,45 +460,125 @@ export function ChatInterface({
                   <SelectGroup>
                     <SelectLabel className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full bg-green-500" />
-                      <span className="text-green-700">OpenAI</span>
+                      <span className="text-green-700">OpenAI - GPT-5 Series</span>
                     </SelectLabel>
-                    <SelectItem value="gpt-4o" className="pl-10">
-                      <div className="flex items-center gap-2">
-                        <span>GPT-4o</span>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="gpt-4o-mini" className="pl-10">
-                      <div className="flex items-center gap-2">
-                        <span>GPT-4o Mini</span>
-                      </div>
-                    </SelectItem>
+                    <SelectItem value="openai/gpt-5.1" className="pl-10">GPT-5.1</SelectItem>
+                    <SelectItem value="openai/gpt-5.1-chat" className="pl-10">GPT-5.1 Chat</SelectItem>
+                    <SelectItem value="openai/gpt-5.1-codex" className="pl-10">GPT-5.1 Codex</SelectItem>
+                    <SelectItem value="openai/gpt-5.1-codex-mini" className="pl-10">GPT-5.1 Codex Mini</SelectItem>
+                    <SelectItem value="openai/gpt-5" className="pl-10">GPT-5</SelectItem>
+                    <SelectItem value="openai/gpt-5-codex" className="pl-10">GPT-5 Codex</SelectItem>
+                    <SelectItem value="openai/gpt-5-chat" className="pl-10">GPT-5 Chat</SelectItem>
+                    <SelectItem value="openai/gpt-5-mini" className="pl-10">GPT-5 Mini</SelectItem>
+                    <SelectItem value="openai/gpt-5-nano" className="pl-10">GPT-5 Nano</SelectItem>
+                  </SelectGroup>
+                  <SelectGroup>
+                    <SelectLabel className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-green-500" />
+                      <span className="text-green-700">OpenAI - o-Series (Reasoning)</span>
+                    </SelectLabel>
+                    <SelectItem value="openai/o3-deep-research" className="pl-10">o3 Deep Research</SelectItem>
+                    <SelectItem value="openai/o3" className="pl-10">o3</SelectItem>
+                    <SelectItem value="openai/o3-mini-high" className="pl-10">o3 Mini High</SelectItem>
+                    <SelectItem value="openai/o3-mini" className="pl-10">o3 Mini</SelectItem>
+                    <SelectItem value="openai/o4-mini" className="pl-10">o4 Mini</SelectItem>
+                    <SelectItem value="openai/o4-mini-deep-research" className="pl-10">o4 Mini Deep Research</SelectItem>
+                    <SelectItem value="openai/o1" className="pl-10">o1</SelectItem>
+                  </SelectGroup>
+                  <SelectGroup>
+                    <SelectLabel className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-green-500" />
+                      <span className="text-green-700">OpenAI - GPT-4.1 Series</span>
+                    </SelectLabel>
+                    <SelectItem value="openai/gpt-4.1" className="pl-10">GPT-4.1</SelectItem>
+                    <SelectItem value="openai/gpt-4.1-mini" className="pl-10">GPT-4.1 Mini</SelectItem>
+                    <SelectItem value="openai/gpt-4.1-nano" className="pl-10">GPT-4.1 Nano</SelectItem>
+                  </SelectGroup>
+                  <SelectGroup>
+                    <SelectLabel className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-green-500" />
+                      <span className="text-green-700">OpenAI - GPT-4o Series</span>
+                    </SelectLabel>
+                    <SelectItem value="openai/gpt-4o" className="pl-10">GPT-4o</SelectItem>
+                    <SelectItem value="openai/gpt-4o-mini" className="pl-10">GPT-4o Mini</SelectItem>
+                  </SelectGroup>
+                  <SelectGroup>
+                    <SelectLabel className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-green-500" />
+                      <span className="text-green-700">OpenAI - GPT-4 Series</span>
+                    </SelectLabel>
+                    <SelectItem value="openai/gpt-4" className="pl-10">GPT-4</SelectItem>
+                  </SelectGroup>
+                  <SelectGroup>
+                    <SelectLabel className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-green-500" />
+                      <span className="text-green-700">OpenAI - GPT OSS Series</span>
+                    </SelectLabel>
+                    <SelectItem value="openai/gpt-oss-120b" className="pl-10">GPT OSS 120B</SelectItem>
+                    <SelectItem value="openai/gpt-oss-20b" className="pl-10">GPT OSS 20B</SelectItem>
+                    <SelectItem value="openai/gpt-oss-20b:free" className="pl-10">GPT OSS 20B (Free)</SelectItem>
                   </SelectGroup>
                   <SelectGroup>
                     <SelectLabel className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full bg-amber-500" />
-                      <span className="text-amber-700">Anthropic</span>
+                      <span className="text-amber-700">Anthropic - Claude 4 Series</span>
                     </SelectLabel>
-                    <SelectItem value="claude-3-5-sonnet" className="pl-10">
-                      <div className="flex items-center gap-2">
-                        <span>Claude 3.5 Sonnet</span>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="claude-3-opus" className="pl-10">
-                      <div className="flex items-center gap-2">
-                        <span>Claude 3 Opus</span>
-                      </div>
-                    </SelectItem>
+                    <SelectItem value="anthropic/claude-sonnet-4.5" className="pl-10">Claude Sonnet 4.5</SelectItem>
+                    <SelectItem value="anthropic/claude-sonnet-4" className="pl-10">Claude Sonnet 4</SelectItem>
+                    <SelectItem value="anthropic/claude-haiku-4.5" className="pl-10">Claude Haiku 4.5</SelectItem>
+                    <SelectItem value="anthropic/claude-opus-4.1" className="pl-10">Claude Opus 4.1</SelectItem>
+                    <SelectItem value="anthropic/claude-opus-4" className="pl-10">Claude Opus 4</SelectItem>
+                  </SelectGroup>
+                  <SelectGroup>
+                    <SelectLabel className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-amber-500" />
+                      <span className="text-amber-700">Anthropic - Claude 3.7 Series</span>
+                    </SelectLabel>
+                    <SelectItem value="anthropic/claude-3.7-sonnet" className="pl-10">Claude 3.7 Sonnet</SelectItem>
+                    <SelectItem value="anthropic/claude-3.7-sonnet:thinking" className="pl-10">Claude 3.7 Sonnet (Thinking)</SelectItem>
+                  </SelectGroup>
+                  <SelectGroup>
+                    <SelectLabel className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-amber-500" />
+                      <span className="text-amber-700">Anthropic - Claude 3.5 Series</span>
+                    </SelectLabel>
+                    <SelectItem value="anthropic/claude-3.5-sonnet" className="pl-10">Claude 3.5 Sonnet</SelectItem>
+                    <SelectItem value="anthropic/claude-3.5-haiku" className="pl-10">Claude 3.5 Haiku</SelectItem>
+                  </SelectGroup>
+                  <SelectGroup>
+                    <SelectLabel className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-amber-500" />
+                      <span className="text-amber-700">Anthropic - Claude 3 Series</span>
+                    </SelectLabel>
+                    <SelectItem value="anthropic/claude-3-opus" className="pl-10">Claude 3 Opus</SelectItem>
+                    <SelectItem value="anthropic/claude-3-haiku" className="pl-10">Claude 3 Haiku</SelectItem>
                   </SelectGroup>
                   <SelectGroup>
                     <SelectLabel className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full bg-blue-500" />
-                      <span className="text-blue-700">DeepSeek</span>
+                      <span className="text-blue-700">DeepSeek - V3 Series</span>
                     </SelectLabel>
-                    <SelectItem value="deepseek-chat" className="pl-10">
-                      <div className="flex items-center gap-2">
-                        <span>DeepSeek Chat</span>
-                      </div>
-                    </SelectItem>
+                    <SelectItem value="deepseek/deepseek-chat" className="pl-10">DeepSeek V3</SelectItem>
+                    <SelectItem value="deepseek/deepseek-chat-v3.1" className="pl-10">DeepSeek V3.1</SelectItem>
+                    <SelectItem value="deepseek/deepseek-chat-v3-0324" className="pl-10">DeepSeek V3 0324</SelectItem>
+                    <SelectItem value="deepseek/deepseek-v3.1-terminus" className="pl-10">DeepSeek V3.1 Terminus</SelectItem>
+                  </SelectGroup>
+                  <SelectGroup>
+                    <SelectLabel className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-blue-500" />
+                      <span className="text-blue-700">DeepSeek - R1 Series</span>
+                    </SelectLabel>
+                    <SelectItem value="deepseek/deepseek-r1" className="pl-10">DeepSeek R1</SelectItem>
+                    <SelectItem value="deepseek/deepseek-r1-0528" className="pl-10">DeepSeek R1 0528</SelectItem>
+                  </SelectGroup>
+                  <SelectGroup>
+                    <SelectLabel className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-blue-500" />
+                      <span className="text-blue-700">TNG - DeepSeek Chimera</span>
+                    </SelectLabel>
+                    <SelectItem value="tngtech/deepseek-r1t2-chimera" className="pl-10">DeepSeek R1T2 Chimera</SelectItem>
+                    <SelectItem value="tngtech/deepseek-r1t2-chimera:free" className="pl-10">DeepSeek R1T2 Chimera (Free)</SelectItem>
+                    <SelectItem value="tngtech/deepseek-r1t-chimera:free" className="pl-10">DeepSeek R1T Chimera (Free)</SelectItem>
                   </SelectGroup>
                 </SelectContent>
               </Select>
@@ -421,7 +588,7 @@ export function ChatInterface({
         
         {/* Chat Messages */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden py-4 relative">
-          <div className="w-full px-8 h-full">
+          <div className="w-full max-w-4xl mx-auto px-8 h-full">
             {chat.messages.length > 0 ? (
               <>
                 {chat.messages.map(message => (
@@ -457,43 +624,38 @@ export function ChatInterface({
         
         {/* Input Area */}
         <div className="border-t border-gray-200 p-4">
-          <div className="w-full px-8 relative">
+          <div className="w-full px-8">
             {/* Using the auto-resize textarea */}
-            <Textarea
-              ref={useAutoResizeTextarea(input)}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Ask anything..."
-              className="min-h-[80px] overflow-y-auto pr-12 resize-none w-full focus:ring-[#7A4BE3] focus:border-[#7A4BE3] transition-height duration-200"
-              style={{ maxHeight: '200px' }}
-            />
-            <Button
-              onClick={handleSend}
-              disabled={!input.trim() || isLoading}
-              className="absolute bottom-3 right-3 h-8 w-8 p-0 bg-[#7A4BE3] hover:bg-[#6A3BD3]"
-              size="icon"
-            >
-              <Send className="w-4 h-4" />
-            </Button>
+            <div className="relative">
+              <Textarea
+                ref={useAutoResizeTextarea(input)}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Ask anything..."
+                className="min-h-[80px] overflow-y-auto pr-12 resize-none w-full focus:ring-[#7A4BE3] focus:border-[#7A4BE3] transition-height duration-200"
+                style={{ maxHeight: '200px' }}
+              />
+              <Button
+                onClick={handleSend}
+                disabled={!input.trim() || isLoading}
+                className="absolute bottom-3 right-3 h-8 w-8 p-0 bg-[#7A4BE3] hover:bg-[#6A3BD3] rounded-md"
+                size="icon"
+              >
+                <Send className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
           <div className="w-full px-8 flex items-center justify-between mt-2 text-xs text-gray-500">
             <span>Press Enter to send, Shift+Enter for new line</span>
             <span className="flex items-center gap-1">
               <div className={`w-2 h-2 rounded-full ${
-                chat.model.startsWith("gpt") ? "bg-green-500" :
-                chat.model.startsWith("claude") ? "bg-amber-500" :
-                chat.model.startsWith("deepseek") ? "bg-blue-500" :
+                getModelColor(chat.model) === "green" ? "bg-green-500" :
+                getModelColor(chat.model) === "amber" ? "bg-amber-500" :
+                getModelColor(chat.model) === "blue" ? "bg-blue-500" :
                 "bg-gray-400"
               }`} />
-              Using {
-                chat.model === "gpt-4o" ? "GPT-4o" : 
-                chat.model === "gpt-4o-mini" ? "GPT-4o Mini" : 
-                chat.model === "claude-3-5-sonnet" ? "Claude 3.5 Sonnet" :
-                chat.model === "claude-3-opus" ? "Claude 3 Opus" :
-                chat.model === "deepseek-chat" ? "DeepSeek Chat" :
-                chat.model
-              }
+              Using {getModelDisplayName(chat.model)}
             </span>
           </div>
         </div>

@@ -19,25 +19,72 @@ def calculate_cost(model: str, prompt_tokens: int, completion_tokens: int) -> Di
     # Load pricing from environment variables if available, otherwise use defaults
     # Format for env vars: OPENAI_PRICE_GPT4O_INPUT=0.005
     
-    # Cost per 1000 tokens in USD (approximate values based on OpenRouter pricing)
+    # Cost per 1000 tokens in USD (OpenRouter pricing)
     default_pricing = {
-        # OpenAI Models
-        "openai/gpt-4o": {"input": 0.005, "output": 0.015},
-        "openai/gpt-4o-mini": {"input": 0.0015, "output": 0.006},
-        "openai/gpt-4-turbo": {"input": 0.01, "output": 0.03},
+        # OpenAI GPT-5 Series
+        "openai/gpt-5.1": {"input": 0.00125, "output": 0.01},
+        "openai/gpt-5.1-chat": {"input": 0.00125, "output": 0.01},
+        "openai/gpt-5.1-codex": {"input": 0.00125, "output": 0.01},
+        "openai/gpt-5.1-codex-mini": {"input": 0.00025, "output": 0.002},
+        "openai/gpt-5-codex": {"input": 0.00125, "output": 0.01},
+        "openai/gpt-5-chat": {"input": 0.00125, "output": 0.01},
+        "openai/gpt-5": {"input": 0.00125, "output": 0.01},
+        "openai/gpt-5-mini": {"input": 0.00025, "output": 0.002},
+        "openai/gpt-5-nano": {"input": 0.00005, "output": 0.0004},
+        
+        # OpenAI GPT OSS Series
+        "openai/gpt-oss-120b": {"input": 0.00004, "output": 0.0004},
+        "openai/gpt-oss-20b:free": {"input": 0, "output": 0},
+        "openai/gpt-oss-20b": {"input": 0.00003, "output": 0.00014},
+        
+        # OpenAI o-Series (Reasoning Models)
+        "openai/o4-mini-deep-research": {"input": 0.002, "output": 0.008},
+        "openai/o3": {"input": 0.002, "output": 0.008},
+        "openai/o4-mini": {"input": 0.0011, "output": 0.0044},
+        "openai/o3-mini-high": {"input": 0.0011, "output": 0.0044},
+        "openai/o3-mini": {"input": 0.0011, "output": 0.0044},
+        "openai/o1": {"input": 0.015, "output": 0.06},
+
+        # OpenAI GPT-4.1 Series
+        "openai/gpt-4.1": {"input": 0.002, "output": 0.008},
+        "openai/gpt-4.1-mini": {"input": 0.0004, "output": 0.0016},
+        "openai/gpt-4.1-nano": {"input": 0.0001, "output": 0.0004},
+        
+        # OpenAI GPT-4o Series
+        "openai/gpt-4o-mini": {"input": 0.00015, "output": 0.0006},
+        "openai/gpt-4o": {"input": 0.0025, "output": 0.01},
+        
+        # OpenAI GPT-4 Series
         "openai/gpt-4": {"input": 0.03, "output": 0.06},
-        "openai/gpt-4-vision-preview": {"input": 0.01, "output": 0.03},
-        "openai/gpt-3.5-turbo": {"input": 0.0005, "output": 0.0015},
         
         # Anthropic Models
-        "anthropic/claude-3-5-sonnet": {"input": 0.003, "output": 0.015},
+        "anthropic/claude-sonnet-4.5": {"input": 0.003, "output": 0.015},
+        "anthropic/claude-sonnet-4": {"input": 0.003, "output": 0.015},
+        "anthropic/claude-haiku-4.5": {"input": 0.001, "output": 0.005},
+        "anthropic/claude-3.7-sonnet": {"input": 0.003, "output": 0.015},
+        "anthropic/claude-3.5-haiku": {"input": 0.0008, "output": 0.004},
+        "anthropic/claude-opus-4.1": {"input": 0.015, "output": 0.075},
+        "anthropic/claude-3.5-sonnet": {"input": 0.003, "output": 0.015},
+        "anthropic/claude-3.7-sonnet:thinking": {"input": 0.003, "output": 0.015},
+        "anthropic/claude-opus-4": {"input": 0.015, "output": 0.075},
         "anthropic/claude-3-opus": {"input": 0.015, "output": 0.075},
-        "anthropic/claude-3-sonnet": {"input": 0.003, "output": 0.015},
         "anthropic/claude-3-haiku": {"input": 0.0025, "output": 0.0125},
         
         # DeepSeek Models
-        "deepseek-ai/deepseek-chat": {"input": 0.0025, "output": 0.0075},
-        "deepseek-ai/deepseek-coder": {"input": 0.0015, "output": 0.005}
+        "deepseek/deepseek-chat-v3-0324": {"input": 0.00024, "output": 0.00084},
+        "deepseek/deepseek-chat-v3.1": {"input": 0.0002, "output": 0.0008},
+        "tngtech/deepseek-r1t2-chimera:free": {"input": 0, "output": 0},
+        "deepseek/deepseek-v3.2-exp": {"input": 0.00027, "output": 0.0004},
+        "deepseek/deepseek-v3.1-terminus": {"input": 0.00023, "output": 0.0009},
+        "deepseek/deepseek-r1-0528": {"input": 0.0002, "output": 0.0045},
+        "tngtech/deepseek-r1t-chimera:free": {"input": 0, "output": 0},
+        "deepseek/deepseek-chat": {"input": 0.0003, "output": 0.0012},
+        "deepseek/deepseek-chat-v3-0324:free": {"input": 0, "output": 0},
+        "tngtech/deepseek-r1t2-chimera": {"input": 0.0003, "output": 0.0012},
+        "deepseek/deepseek-r1-0528:free": {"input": 0, "output": 0},
+        "deepseek/deepseek-r1": {"input": 0.0003, "output": 0.0012},
+        "deepseek/deepseek-r1:free": {"input": 0, "output": 0},
+
     }
     
     # Strip provider prefix if present (e.g., "openai/gpt-4o" -> "gpt-4o") for env var lookups
@@ -108,7 +155,7 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     messages: List[ChatMessage]
-    model: Optional[str] = "openai/gpt-3.5-turbo"
+    model: Optional[str] = "openai/gpt-4o-mini"
 
 class ChatResponse(BaseModel):
     role: str
@@ -123,21 +170,70 @@ async def get_pricing():
     """Return the current pricing information for all models"""
     # Re-use the logic from calculate_cost to get current pricing
     default_pricing = {
-        # OpenAI Models
-        "openai/gpt-4o": {"input": 0.005, "output": 0.015},
-        "openai/gpt-4o-mini": {"input": 0.0015, "output": 0.006},
-        "openai/gpt-4-turbo": {"input": 0.01, "output": 0.03},
-        "openai/gpt-4": {"input": 0.03, "output": 0.06},
-        "openai/gpt-4-vision-preview": {"input": 0.01, "output": 0.03},
-        "openai/gpt-3.5-turbo": {"input": 0.0005, "output": 0.0015},
+        # OpenAI GPT-5 Series
+        "openai/gpt-5.1": {"input": 0.00125, "output": 0.01},
+        "openai/gpt-5.1-chat": {"input": 0.00125, "output": 0.01},
+        "openai/gpt-5.1-codex": {"input": 0.00125, "output": 0.01},
+        "openai/gpt-5.1-codex-mini": {"input": 0.00025, "output": 0.002},
+        "openai/gpt-5-codex": {"input": 0.00125, "output": 0.01},
+        "openai/gpt-5-chat": {"input": 0.00125, "output": 0.01},
+        "openai/gpt-5": {"input": 0.00125, "output": 0.01},
+        "openai/gpt-5-mini": {"input": 0.00025, "output": 0.002},
+        "openai/gpt-5-nano": {"input": 0.00005, "output": 0.0004},
         
+        # OpenAI GPT OSS Series
+        "openai/gpt-oss-120b": {"input": 0.00004, "output": 0.0004},
+        "openai/gpt-oss-20b:free": {"input": 0, "output": 0},
+        "openai/gpt-oss-20b": {"input": 0.00003, "output": 0.00014},
+        
+        # OpenAI o-Series (Reasoning Models)
+        "openai/o4-mini-deep-research": {"input": 0.002, "output": 0.008},
+        "openai/o3": {"input": 0.002, "output": 0.008},
+        "openai/o4-mini": {"input": 0.0011, "output": 0.0044},
+        "openai/o3-mini-high": {"input": 0.0011, "output": 0.0044},
+        "openai/o3-mini": {"input": 0.0011, "output": 0.0044},
+        "openai/o1": {"input": 0.015, "output": 0.06},
+
+        # OpenAI GPT-4.1 Series
+        "openai/gpt-4.1": {"input": 0.002, "output": 0.008},
+        "openai/gpt-4.1-mini": {"input": 0.0004, "output": 0.0016},
+        "openai/gpt-4.1-nano": {"input": 0.0001, "output": 0.0004},
+        
+        # OpenAI GPT-4o Series
+        "openai/gpt-4o-mini": {"input": 0.00015, "output": 0.0006},
+        "openai/gpt-4o": {"input": 0.0025, "output": 0.01},
+        
+        # OpenAI GPT-4 Series
+        "openai/gpt-4": {"input": 0.03, "output": 0.06},
+ 
         # Anthropic Models
-        "anthropic/claude-3-5-sonnet": {"input": 0.003, "output": 0.015},
+        "anthropic/claude-sonnet-4.5": {"input": 0.003, "output": 0.015},
+        "anthropic/claude-sonnet-4": {"input": 0.003, "output": 0.015},
+        "anthropic/claude-haiku-4.5": {"input": 0.001, "output": 0.005},
+        "anthropic/claude-3.7-sonnet": {"input": 0.003, "output": 0.015},
+        "anthropic/claude-3.5-haiku": {"input": 0.0008, "output": 0.004},
+        "anthropic/claude-opus-4.1": {"input": 0.015, "output": 0.075},
+        "anthropic/claude-3.5-sonnet": {"input": 0.003, "output": 0.015},
+        "anthropic/claude-3.7-sonnet:thinking": {"input": 0.003, "output": 0.015},
+        "anthropic/claude-opus-4": {"input": 0.015, "output": 0.075},
         "anthropic/claude-3-opus": {"input": 0.015, "output": 0.075},
-        "anthropic/claude-3-sonnet": {"input": 0.003, "output": 0.015},
         "anthropic/claude-3-haiku": {"input": 0.0025, "output": 0.0125},
         
         # DeepSeek Models
+        "deepseek/deepseek-chat-v3-0324": {"input": 0.00024, "output": 0.00084},
+        "deepseek/deepseek-chat-v3.1": {"input": 0.0002, "output": 0.0008},
+        "tngtech/deepseek-r1t2-chimera:free": {"input": 0, "output": 0},
+        "deepseek/deepseek-v3.2-exp": {"input": 0.00027, "output": 0.0004},
+        "deepseek/deepseek-v3.1-terminus": {"input": 0.00023, "output": 0.0009},
+        "deepseek/deepseek-r1-0528": {"input": 0.0002, "output": 0.0045},
+        "tngtech/deepseek-r1t-chimera:free": {"input": 0, "output": 0},
+        "deepseek/deepseek-chat": {"input": 0.0003, "output": 0.0012},
+        "deepseek/deepseek-chat-v3-0324:free": {"input": 0, "output": 0},
+        "tngtech/deepseek-r1t2-chimera": {"input": 0.0003, "output": 0.0012},
+        "deepseek/deepseek-r1-0528:free": {"input": 0, "output": 0},
+        "deepseek/deepseek-r1": {"input": 0.0003, "output": 0.0012},
+        "deepseek/deepseek-r1:free": {"input": 0, "output": 0},
+        # Legacy DeepSeek models
         "deepseek-ai/deepseek-chat": {"input": 0.0025, "output": 0.0075},
         "deepseek-ai/deepseek-coder": {"input": 0.0015, "output": 0.005}
     }
@@ -205,15 +301,14 @@ async def chat(request: ChatRequest):
             elif model.lower() in ["deepseek-coder", "deepseekcoder"]:
                 model = "deepseek/deepseek-chat-v3.1:free"
                 
-            # OpenAI models - these usually don't need special mapping as they follow the standard naming,
-            # but add convenience aliases
+            # OpenAI models - convenience aliases and mappings
+            # GPT-4o series
             elif model.lower() in ["gpt4o", "4o"]:
                 model = "openai/gpt-4o"
-            elif model.lower() in ["gpt4o-mini", "4o-mini", "gpt-4o-mini"]:
+            elif model.lower() in ["gpt4o-mini", "4o-mini"]:
                 model = "openai/gpt-4o-mini"
             elif model.lower() in ["gpt-4-vision", "gpt4vision"]:
                 model = "openai/gpt-4-vision-preview"
-            # Add other special cases as needed
             
             # Default case - if no special mapping and no provider prefix
             elif not ('/' in model):

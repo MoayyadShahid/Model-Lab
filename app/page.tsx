@@ -26,7 +26,7 @@ export default function RootPage() {
     <div className="h-screen flex items-center justify-center bg-white">
       <div className="text-center">
         <div className="w-24 h-24 flex items-center justify-center mx-auto mb-6">
-          <Image src="/logo.png" alt="Model Lab Logo" width={96} height={96} className="rounded-xl" />
+          <Image src="/logo.png" alt="Model Lab Logo" width={96} height={96} className="rounded-xl" priority style={{ width: 'auto', height: 'auto' }} />
         </div>
         <h2 className="text-2xl font-semibold text-gray-900 mb-3">Loading Model Lab</h2>
         <div className="animate-pulse flex space-x-1 justify-center">

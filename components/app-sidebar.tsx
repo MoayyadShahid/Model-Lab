@@ -6,7 +6,7 @@ import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarRail } fr
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import type { Chat } from "@/app/page"
+import type { Chat } from "@/lib/types"
 import Image from "next/image"
 
 interface AppSidebarProps {
@@ -16,22 +16,70 @@ interface AppSidebarProps {
   onSelectChat: (chatId: string) => void
 }
 
-const modelColors = {
-  "gpt-4o": "bg-green-100 text-green-700",
-  "gpt-4o-mini": "bg-green-100 text-green-700",
-  "gpt-4-turbo": "bg-green-100 text-green-700",
-  "claude-3-5-sonnet": "bg-orange-100 text-orange-700",
-  "claude-3-opus": "bg-orange-100 text-orange-700",
-  "claude-3-haiku": "bg-orange-100 text-orange-700",
-  "deepseek-chat": "bg-blue-100 text-blue-700",
-  "deepseek-coder": "bg-blue-100 text-blue-700",
+// Helper function to get model color based on model ID
+const getModelColor = (modelId: string): string => {
+  if (modelId.includes("gpt") || modelId.includes("openai") || modelId.startsWith("o")) {
+    return "green"
+  } else if (modelId.includes("claude")) {
+    return "amber"
+  } else if (modelId.includes("deepseek")) {
+    return "blue"
+  }
+  return "gray"
+}
+
+const getModelColorClass = (modelId: string): string => {
+  const color = getModelColor(modelId)
+  switch(color) {
+    case "green": return "bg-green-100 text-green-700"
+    case "amber": return "bg-orange-100 text-orange-700"
+    case "blue": return "bg-blue-100 text-blue-700"
+    default: return "bg-gray-100 text-gray-700"
+  }
 }
 
 const getModelDisplayName = (modelId: string) => {
   const modelNames: Record<string, string> = {
+    // OpenAI GPT-5 Series
+    "openai/gpt-5.1": "GPT-5.1",
+    "openai/gpt-5.1-chat": "GPT-5.1 Chat",
+    "openai/gpt-5.1-codex": "GPT-5.1 Codex",
+    "openai/gpt-5.1-codex-mini": "GPT-5.1 Codex Mini",
+    "openai/gpt-5-codex": "GPT-5 Codex",
+    "openai/gpt-5-chat": "GPT-5 Chat",
+    "openai/gpt-5": "GPT-5",
+    "openai/gpt-5-mini": "GPT-5 Mini",
+    "openai/gpt-5-nano": "GPT-5 Nano",
+    
+    // OpenAI o-Series (Reasoning Models)
+    "openai/o4-mini-deep-research": "o4 Mini Deep Research",
+    "openai/o3": "o3",
+    "openai/o4-mini": "o4 Mini",
+    "openai/o1-pro": "o1 Pro",
+    "openai/o3-mini-high": "o3 Mini High",
+    "openai/o3-mini": "o3 Mini",
+    "openai/o1": "o1",
+    
+    // OpenAI GPT-4.1 Series
+    "openai/gpt-4.1": "GPT-4.1",
+    "openai/gpt-4.1-mini": "GPT-4.1 Mini",
+    "openai/gpt-4.1-nano": "GPT-4.1 Nano",
+    
+    // OpenAI GPT-4o Series
+    "openai/gpt-4o-mini": "GPT-4o Mini",
+    "openai/gpt-4o": "GPT-4o",
+    
+    // OpenAI GPT-4 Series
+    "openai/gpt-4": "GPT-4",
+
+    // OpenAI GPT OSS Series
+    "openai/gpt-oss-120b": "GPT OSS 120B",
+    "openai/gpt-oss-20b:free": "GPT OSS 20B (Free)",
+    "openai/gpt-oss-20b": "GPT OSS 20B",
+    
+    // Legacy mappings without provider prefix
     "gpt-4o": "GPT-4o",
     "gpt-4o-mini": "GPT-4o Mini",
-    "gpt-4-turbo": "GPT-4 Turbo",
     "claude-3-5-sonnet": "Claude 3.5 Sonnet",
     "claude-3-opus": "Claude 3 Opus",
     "claude-3-haiku": "Claude 3 Haiku",
@@ -106,9 +154,7 @@ function ChatHistorySection({
                   <p className="text-xs text-gray-500 line-clamp-2 mb-2">{preview}</p>
                   <div className="flex items-center justify-between">
                     <span
-                      className={`text-xs px-2 py-1 rounded-full font-medium ${
-                        modelColors[chat.model as keyof typeof modelColors] || "bg-gray-100 text-gray-700"
-                      }`}
+                      className={`text-xs px-2 py-1 rounded-full font-medium ${getModelColorClass(chat.model)}`}
                     >
                       {getModelDisplayName(chat.model)}
                     </span>

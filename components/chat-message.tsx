@@ -30,20 +30,20 @@ export function ChatMessage({ message }: ChatMessageProps) {
             </span>
           </div>
 
-          <div className="prose prose-sm max-w-none text-gray-900">
+          <div className="prose prose-sm max-w-none text-gray-900 break-words" style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
             {isUser ? (
-              <p className="whitespace-pre-wrap">{message.content}</p>
+              <p className="whitespace-pre-wrap break-words" style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{message.content}</p>
             ) : (
               <>
                 <ReactMarkdown
                   components={{
                     code({ node, inline, className, children, ...props }) {
                       return !inline ? (
-                        <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto my-4">
-                          <code {...props}>{String(children).replace(/\n$/, "")}</code>
+                        <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto my-4 max-w-full break-words" style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
+                          <code className="break-words whitespace-pre-wrap" style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }} {...props}>{String(children).replace(/\n$/, "")}</code>
                         </pre>
                       ) : (
-                        <code className="bg-gray-100 px-1 py-0.5 rounded text-sm font-mono" {...props}>
+                        <code className="bg-gray-100 px-1 py-0.5 rounded text-sm font-mono break-words" {...props}>
                           {children}
                         </code>
                       )
@@ -51,7 +51,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
                     h1: ({ children }) => <h1 className="text-xl font-bold mt-6 mb-4">{children}</h1>,
                     h2: ({ children }) => <h2 className="text-lg font-semibold mt-5 mb-3">{children}</h2>,
                     h3: ({ children }) => <h3 className="text-base font-medium mt-4 mb-2">{children}</h3>,
-                    p: ({ children }) => <p className="mb-4 leading-relaxed">{children}</p>,
+                    p: ({ children }) => <p className="mb-4 leading-relaxed break-words" style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{children}</p>,
                     ul: ({ children }) => <ul className="mb-4 ml-4 list-disc">{children}</ul>,
                     ol: ({ children }) => <ol className="mb-4 ml-4 list-decimal">{children}</ol>,
                     li: ({ children }) => <li className="mb-1">{children}</li>,

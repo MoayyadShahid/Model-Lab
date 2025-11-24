@@ -35,7 +35,7 @@ export default function LoginPage() {
         <div className="w-full lg:w-1/2 flex flex-col justify-center px-8 py-12 lg:px-16">
           <div className="max-w-md mx-auto lg:mx-0">
             <div className="flex items-center mb-8">
-              <Image src="/logo.png" alt="Model Lab Logo" width={48} height={48} className="rounded-lg" />
+              <Image src="/logo.png" alt="Model Lab Logo" width={48} height={48} className="rounded-lg" priority style={{ width: 'auto', height: 'auto' }} />
               <h1 className="ml-3 text-3xl font-bold text-gray-900">Model Lab</h1>
             </div>
             
