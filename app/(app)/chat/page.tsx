@@ -92,7 +92,7 @@ export default function ChatPage() {
       const newChatData = {
         user_id: userId,
         title: "New Chat",
-        model: "gpt-4o"
+        model: "openai/gpt-4o"
       };
       
       const { data: chat, error } = await supabase

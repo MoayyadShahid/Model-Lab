@@ -37,8 +37,11 @@ export function ChatMessage({ message }: ChatMessageProps) {
               <>
                 <ReactMarkdown
                   components={{
-                    code({ node, inline, className, children, ...props }) {
-                      return !inline ? (
+                    code({ node, className, children, ...props }) {
+                      // Determine if code is inline: block code has a language class (language-*), inline code doesn't
+                      const isInline = !className || !className.includes('language-');
+                      
+                      return !isInline ? (
                         <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto my-4 max-w-full break-words" style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
                           <code className="break-words whitespace-pre-wrap" style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }} {...props}>{String(children).replace(/\n$/, "")}</code>
                         </pre>
