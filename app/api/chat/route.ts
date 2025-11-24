@@ -1,15 +1,61 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 // The URL where your FastAPI backend is running
-const API_URL = 'http://localhost:8000';
+const API_URL = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000';
+
+// Retry helper function
+async function fetchWithRetry(url: string, options: RequestInit, maxRetries = 3): Promise<Response> {
+  let lastError: Error;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, {
+        ...options,
+        signal: AbortSignal.timeout(30000), // 30 second timeout
+      });
+      
+      if (response.ok) {
+        return response;
+      }
+      
+      // Don't retry on 4xx errors (client errors)
+      if (response.status >= 400 && response.status < 500) {
+        throw new Error(`Client error: ${response.status} ${response.statusText}`);
+      }
+      
+      // Retry on 5xx errors (server errors)
+      lastError = new Error(`Server error: ${response.status} ${response.statusText}`);
+      
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error('Unknown error');
+      
+      // Don't retry on AbortError (timeout)
+      if (lastError.name === 'AbortError') {
+        throw lastError;
+      }
+    }
+    
+    if (attempt < maxRetries) {
+      // Exponential backoff: wait 1s, then 2s, then 4s
+      await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt - 1) * 1000));
+    }
+  }
+  
+  throw lastError!;
+}
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { stream } = body;
     
-    // Forward the request to the Python backend
-    const backendResponse = await fetch(`${API_URL}/api/chat`, {
+    // Validate API URL
+    if (!API_URL || API_URL === 'undefined') {
+      throw new Error('Backend API URL not configured');
+    }
+    
+    // Forward the request to the Python backend with retry logic
+    const backendResponse = await fetchWithRetry(`${API_URL}/api/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -78,12 +124,33 @@ export async function POST(request: NextRequest) {
     }
   } catch (error) {
     console.error('Error calling backend:', error);
+    
+    // Determine appropriate error message based on error type
+    let errorMessage = "Sorry, there was an error processing your request. Please try again.";
+    let statusCode = 500;
+    
+    if (error instanceof Error) {
+      if (error.name === 'AbortError') {
+        errorMessage = "Request timed out. Please try again.";
+        statusCode = 408;
+      } else if (error.message.includes('Backend API URL not configured')) {
+        errorMessage = "Service configuration error. Please contact support.";
+        statusCode = 503;
+      } else if (error.message.includes('Client error: 4')) {
+        errorMessage = "Invalid request. Please check your input and try again.";
+        statusCode = 400;
+      } else if (error.message.includes('Server error: 5')) {
+        errorMessage = "Backend service temporarily unavailable. Please try again in a moment.";
+        statusCode = 503;
+      }
+    }
+    
     return NextResponse.json(
       { 
         error: 'Failed to process request',
-        message: { role: "assistant", content: "Sorry, there was an error processing your request. Please try again." }
+        message: { role: "assistant", content: errorMessage }
       },
-      { status: 500 }
+      { status: statusCode }
     );
   }
 }

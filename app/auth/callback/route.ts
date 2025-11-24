@@ -8,24 +8,20 @@ export async function GET(request: NextRequest) {
   const code = requestUrl.searchParams.get('code');
   
   // Create a Supabase client using the SSR package
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get: (name) => {
-          const cookie = cookieStore.get(name);
-          return cookie?.value;
+        getAll() {
+          return cookieStore.getAll();
         },
-        set: (name, value, options) => {
-          cookieStore.set(name, value, options);
-          return {};
-        },
-        remove: (name, options) => {
-          cookieStore.set(name, '', { ...options, maxAge: 0 });
-          return {};
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            cookieStore.set(name, value, options);
+          });
         },
       },
     }

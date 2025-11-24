@@ -7,6 +7,7 @@ import { ChatInterface } from "@/components/chat-interface";
 import type { Chat, Message } from "@/lib/types";
 import { LoadingSpinner } from "@/components/loading-spinner";
 import { SidebarProvider } from "@/components/ui/sidebar";
+import ErrorBoundary, { ChatErrorFallback } from "@/components/error-boundary";
 
 export default function ChatPage() {
   const router = useRouter();
@@ -14,11 +15,51 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(true);
   const [chats, setChats] = useState<Chat[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [loadingMessages, setLoadingMessages] = useState<Set<string>>(new Set());
+  // Removed failed messages queue - too complex
+
+  // Removed testDatabaseInsertion function - was creating spam messages
+
+  // Removed inspectDatabaseState function - too verbose
+
+  // Removed generateDebugSummary function - too verbose
+
+  // Simple validation function for testing
+  const validateMessagePersistence = async (chatId: string) => {
+    try {
+      const currentChat = chats.find(c => c.id === chatId);
+      const { data: dbMessages } = await supabase
+        .from('messages')
+        .select('id, role, content')
+        .eq('chat_id', chatId);
+      
+      const uiMessageCount = currentChat?.messages.length || 0;
+      const dbMessageCount = dbMessages?.length || 0;
+      
+      console.log("Message persistence check:", {
+        chatId: chatId.substring(0, 8) + "...",
+        uiMessages: uiMessageCount,
+        dbMessages: dbMessageCount,
+        consistent: uiMessageCount <= dbMessageCount // DB might have more due to async loading
+      });
+      
+      return dbMessageCount > 0;
+    } catch (error) {
+      console.error("Validation failed:", error);
+      return false;
+    }
+  };
+
+  // Removed manual save function - simplifying approach
 
   useEffect(() => {
+    let isMounted = true;
+    
     // Check if user is authenticated
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!isMounted) return;
       
       if (!session) {
         router.push('/');
@@ -26,17 +67,82 @@ export default function ChatPage() {
       }
       
       setUser(session.user);
+      console.log("User authenticated:", session.user.id);
+      
+      // Ensure user profile exists
+      try {
+        const { data: userProfile, error: profileError } = await supabase
+          .from('users')
+          .select('id')
+          .eq('id', session.user.id)
+          .single();
+        
+        if (profileError && profileError.code === 'PGRST116') {
+          // User profile doesn't exist, create it
+          const { error: createError } = await supabase
+            .from('users')
+            .insert({
+              id: session.user.id,
+              email: session.user.email || '',
+            });
+          
+          if (createError) {
+            console.error("Error creating user profile:", {
+              errorMessage: createError.message || 'No message',
+              errorCode: createError.code || 'No code', 
+              errorString: String(createError),
+              fullError: JSON.stringify(createError),
+            });
+            console.error("Raw profile creation error:", createError);
+          } else {
+            console.log("User profile created successfully");
+          }
+        }
+      } catch (profileError) {
+        console.warn("User profile check/creation failed:", profileError);
+      }
+      
       await loadChats(session.user.id);
-      setLoading(false);
+      if (isMounted) {
+        setLoading(false);
+      }
     };
     
     checkUser();
+    
+    // Cleanup function to prevent state updates on unmounted component
+    return () => {
+      isMounted = false;
+    };
   }, [router]);
 
-  // Load chats from Supabase
+  // Load messages when active chat changes (lazy loading)
+  useEffect(() => {
+    let isMounted = true;
+    
+    const loadActiveChat = async () => {
+      if (activeChatId && isMounted) {
+        const activeChat = chats.find(chat => chat.id === activeChatId);
+        // Only load messages if they haven't been loaded yet
+        if (activeChat && activeChat.messages.length === 0 && activeChat.title !== "New Chat") {
+          await loadChatMessages(activeChatId);
+        }
+      }
+    };
+    
+    loadActiveChat();
+    
+    return () => {
+      isMounted = false;
+    };
+  }, [activeChatId, chats]);
+
+  // Load chats from Supabase (lazy loading - messages loaded on demand)
   const loadChats = async (userId: string) => {
     try {
-      // Get all chats for the user
+      console.log("Loading chats for user:", userId);
+      
+      // Get all chats for the user (metadata only)
       const { data: chatsData, error: chatsError } = await supabase
         .from('chats')
         .select('*')
@@ -45,66 +151,174 @@ export default function ChatPage() {
       
       if (chatsError) throw chatsError;
       
-      // Load existing chats with their messages (for sidebar)
-      const chatsWithMessages = chatsData ? await Promise.all(
-        chatsData.map(async (chat) => {
-          const { data: messagesData } = await supabase
-            .from('messages')
-            .select('*')
-            .eq('chat_id', chat.id)
-            .order('created_at', { ascending: true });
-          
-          return {
-            id: chat.id,
-            title: chat.title,
-            model: chat.model,
-            createdAt: new Date(chat.created_at),
-            messages: (messagesData || []).map((msg) => ({
-              id: msg.id,
-              role: msg.role as "user" | "assistant",
-              content: msg.content,
-              timestamp: new Date(msg.created_at),
-              usage: msg.usage
-            }))
-          };
-        })
-      ) : [];
+      // Create chat objects without messages (lazy loading)
+      const chatsWithoutMessages = (chatsData || []).map((chat) => ({
+        id: chat.id,
+        title: chat.title,
+        model: chat.model,
+        createdAt: new Date(chat.created_at),
+        messages: [] // Messages will be loaded on demand
+      }));
       
-      // ALWAYS create a fresh new chat when signing in
+      // Smart new chat creation: only create if no empty chats exist
+      let activeChat: Chat | null = null;
+      const emptyChatExists = chatsWithoutMessages.find(chat => 
+        chat.title === "New Chat"
+      );
+      
+      if (emptyChatExists) {
+        // Use existing empty chat and load its messages
+        await loadChatMessages(emptyChatExists.id);
+        activeChat = emptyChatExists;
+        setChats(chatsWithoutMessages);
+        setActiveChatId(activeChat.id);
+      } else {
+        // Only create new chat if no empty chat exists
+        const newChatData = {
+          user_id: userId,
+          title: "New Chat",
+          model: "openai/gpt-4o"
+        };
+        
+        const { data: chat, error: chatError } = await supabase
+          .from('chats')
+          .insert(newChatData)
+          .select()
+          .single();
+        
+        if (chatError) throw chatError;
+        
+        const newChat: Chat = {
+          id: chat.id,
+          title: chat.title,
+          model: chat.model,
+          createdAt: new Date(chat.created_at),
+          messages: []
+        };
+        
+        // Set chats with existing chats + new chat at the front
+        setChats([newChat, ...chatsWithoutMessages]);
+        setActiveChatId(newChat.id);
+      }
+    } catch (error) {
+      console.error("Error loading chats:", {
+        errorMessage: (error as any)?.message || 'No message',
+        errorCode: (error as any)?.code || 'No code',
+        errorString: String(error),
+        fullError: JSON.stringify(error),
+        errorKeys: Object.keys(error || {}),
+      });
+      console.error("Raw error:", error);
+      
+      // If it's a database error, we might need to create the user profile
+      if ((error as any)?.code === 'PGRST116' || (error as any)?.message?.includes('violates row-level security policy')) {
+        console.warn("User profile might not exist, attempting to create...");
+        // The user profile should be automatically created by the trigger
+        // but if it fails, we can handle it gracefully
+      }
+      
+      // Create empty chat anyway to allow user to use the app
       const newChatData = {
         user_id: userId,
         title: "New Chat",
         model: "openai/gpt-4o"
       };
       
-      const { data: chat, error: chatError } = await supabase
-        .from('chats')
-        .insert(newChatData)
-        .select()
-        .single();
-      
-      if (chatError) throw chatError;
-      
-      const newChat: Chat = {
-        id: chat.id,
-        title: chat.title,
-        model: chat.model,
-        createdAt: new Date(chat.created_at),
-        messages: []
-      };
-      
-      // Set chats with existing chats + new chat at the front
-      setChats([newChat, ...chatsWithMessages]);
-      setActiveChatId(newChat.id);
-    } catch (error) {
-      console.error("Error loading chats:", error);
-      // Handle error appropriately
+      try {
+        const { data: chat, error: chatError } = await supabase
+          .from('chats')
+          .insert(newChatData)
+          .select()
+          .single();
+        
+        if (!chatError && chat) {
+          const newChat: Chat = {
+            id: chat.id,
+            title: chat.title,
+            model: chat.model,
+            createdAt: new Date(chat.created_at),
+            messages: []
+          };
+          
+          setChats([newChat]);
+          setActiveChatId(newChat.id);
+        }
+      } catch (fallbackError) {
+        console.error("Fallback chat creation failed:", (fallbackError as any)?.message || fallbackError);
+      }
     }
   };
 
-  // Create a new chat
+  // Load messages for a specific chat (on-demand with race condition protection)
+  const loadChatMessages = async (chatId: string) => {
+    // Prevent duplicate loading requests
+    if (loadingMessages.has(chatId)) {
+      console.log("Skipping message load - already in progress:", chatId);
+      return;
+    }
+    
+    try {
+      console.log("Loading messages for chat:", chatId);
+      setLoadingMessages(prev => new Set(prev).add(chatId));
+      
+      const { data: messagesData, error } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('chat_id', chatId)
+        .order('created_at', { ascending: true });
+      
+      if (error) {
+        console.error("Database query error:", error);
+        throw error;
+      }
+      
+      const messages = (messagesData || []).map((msg) => ({
+        id: msg.id,
+        role: msg.role as "user" | "assistant",
+        content: msg.content,
+        timestamp: new Date(msg.created_at),
+        usage: msg.usage
+      }));
+      
+      console.log("Loaded", messages.length, "messages for chat", chatId);
+      
+      // Update the specific chat with its messages
+      setChats((prevChats) =>
+        prevChats.map((chat) =>
+          chat.id === chatId ? { ...chat, messages } : chat
+        )
+      );
+    } catch (error) {
+      console.error("❌ Error loading chat messages:", {
+        errorMessage: (error as any)?.message || 'No message',
+        errorCode: (error as any)?.code || 'No code',
+        errorString: String(error),
+      });
+      console.error("Raw error:", error);
+    } finally {
+      setLoadingMessages(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(chatId);
+        return newSet;
+      });
+    }
+  };
+
+  // Create a new chat (with smart creation logic)
   const createNewChat = async (userId: string) => {
     try {
+      // First check if there's an existing empty chat
+      const existingEmptyChat = chats.find(chat => 
+        chat.messages.length === 0 && chat.title === "New Chat"
+      );
+      
+      if (existingEmptyChat) {
+        // Just switch to the existing empty chat instead of creating a new one
+        setActiveChatId(existingEmptyChat.id);
+        return existingEmptyChat;
+      }
+      
+      // Only create a new chat if no empty chat exists
       const newChatData = {
         user_id: userId,
         title: "New Chat",
@@ -140,6 +354,9 @@ export default function ChatPage() {
   // Update a chat
   const updateChat = async (chatId: string, updates: Partial<Chat>) => {
     try {
+      // Simplified logging
+      console.log("Updating chat:", chatId, updates.messages?.length || 0, "messages");
+
       // Update local state first for immediate UI response
       setChats((prevChats) => 
         prevChats.map((chat) => 
@@ -147,101 +364,63 @@ export default function ChatPage() {
         )
       );
       
-      // If there are message updates, handle them
+      // If there are message updates, handle them with simplified logic
       if (updates.messages) {
         // Filter out loading messages - they should NEVER be saved to database
         const finalMessages = updates.messages.filter(
           msg => msg.content !== "__LOADING__" && !msg.id.startsWith('loading-')
         );
         
-        // Get current messages from state to compare
-        const chat = chats.find(c => c.id === chatId);
-        const currentMessages = chat?.messages || [];
+        // Get current messages from database to avoid state-based race conditions
+        const { data: currentDbMessages } = await supabase
+          .from('messages')
+          .select('id, content, role')
+          .eq('chat_id', chatId)
+          .order('created_at', { ascending: true });
         
-        // Find messages that are actually new (not in current state)
-        const currentMessageIds = new Set(currentMessages.map(m => m.id));
-        const newMessages = finalMessages.filter(msg => !currentMessageIds.has(msg.id));
+        const currentDbMessageIds = new Set((currentDbMessages || []).map(m => m.id));
         
-        // Also check for messages that were updated (same ID, different content)
-        // This handles the case where a loading message is replaced with final content
-        const updatedMessages = finalMessages.filter(msg => {
-          const existingMsg = currentMessages.find(m => m.id === msg.id);
-          return existingMsg && existingMsg.content !== msg.content;
-        });
-        
-        // Save new messages to database
-        for (const message of newMessages) {
-          // Check if message already exists in database (prevent duplicates)
-          const messageTime = new Date(message.timestamp);
-          const timeStart = new Date(messageTime.getTime() - 2000);
-          const timeEnd = new Date(messageTime.getTime() + 2000);
+        // Simple, reliable message insertion
+        for (const message of finalMessages) {
+          // Skip messages that are already in database or have temporary IDs
+          if (currentDbMessageIds.has(message.id)) {
+            continue;
+          }
           
-          const { data: existingMessages } = await supabase
+          if (message.id.includes('temp-') || message.id.includes('loading-')) {
+            continue;
+          }
+          
+          // Prepare message data for insertion
+          const messageData = {
+            id: message.id,
+            chat_id: chatId,
+            role: message.role,
+            content: message.content,
+            created_at: message.timestamp.toISOString(),
+            usage: message.usage || null
+          };
+          
+          console.log("Inserting message:", message.id, message.role);
+          
+          // Try upsert first to handle duplicates gracefully
+          const { error: upsertError } = await supabase
             .from('messages')
-            .select('id')
-            .eq('chat_id', chatId)
-            .eq('role', message.role)
-            .eq('content', message.content)
-            .gte('created_at', timeStart.toISOString())
-            .lte('created_at', timeEnd.toISOString())
-            .limit(1);
+            .upsert(messageData, { onConflict: 'id' });
           
-          // Only insert if it doesn't already exist
-          if (!existingMessages || existingMessages.length === 0) {
-            await supabase
-              .from('messages')
-              .insert({
-                chat_id: chatId,
-                role: message.role,
-                content: message.content,
-                created_at: message.timestamp.toISOString(),
-                usage: message.usage || null
-              });
+          if (upsertError) {
+            console.error("❌ Message upsert failed:", {
+              messageId: message.id,
+              messageRole: message.role,
+              errorMessage: upsertError.message || 'No message',
+              errorCode: upsertError.code || 'No code',
+            });
+            console.error("Raw upsert error:", upsertError);
+          } else {
+            console.log("✅ Message saved:", message.id, message.role);
           }
         }
         
-        // Update messages that changed (e.g., loading -> final content)
-        for (const message of updatedMessages) {
-          const existingMsg = currentMessages.find(m => m.id === message.id);
-          
-          // Only update if the existing message was a loading message or content actually changed
-          if (existingMsg && (
-            existingMsg.content === "__LOADING__" || 
-            existingMsg.id.startsWith('loading-') ||
-            existingMsg.content !== message.content
-          )) {
-            // Check if this message exists in DB (it might not if it was only a loading state)
-            const { data: dbMessage } = await supabase
-              .from('messages')
-              .select('id')
-              .eq('chat_id', chatId)
-              .eq('role', message.role)
-              .eq('content', existingMsg.content)
-              .limit(1);
-            
-            if (dbMessage && dbMessage.length > 0) {
-              // Update existing message
-              await supabase
-                .from('messages')
-                .update({
-                  content: message.content,
-                  usage: message.usage || null
-                })
-                .eq('id', dbMessage[0].id);
-            } else {
-              // Insert as new message (loading message was never saved)
-              await supabase
-                .from('messages')
-                .insert({
-                  chat_id: chatId,
-                  role: message.role,
-                  content: message.content,
-                  created_at: message.timestamp.toISOString(),
-                  usage: message.usage || null
-                });
-            }
-          }
-        }
       }
       
       // Update other chat properties if needed
@@ -300,15 +479,25 @@ export default function ChatPage() {
   return (
     <SidebarProvider defaultOpen={true} className="w-full">
       <div className="h-screen overflow-hidden w-full flex-1 min-w-0">
-        <ChatInterface 
-          chat={activeChat}
-          onUpdateChat={updateChat}
-          onCreateChat={() => createNewChat(user.id)}
-          onDeleteChat={deleteChat}
-          onChangeActiveChat={(chatId) => setActiveChatId(chatId)}
-          chats={chats}
-          user={user}
-        />
+        <ErrorBoundary fallback={ChatErrorFallback}>
+          <ChatInterface 
+            chat={activeChat}
+            onUpdateChat={updateChat}
+            onCreateChat={() => createNewChat(user.id)}
+            onDeleteChat={deleteChat}
+            onChangeActiveChat={(chatId) => {
+              setActiveChatId(chatId);
+              // Load messages for the selected chat if not already loaded
+              const selectedChat = chats.find(chat => chat.id === chatId);
+              if (selectedChat && selectedChat.messages.length === 0 && selectedChat.title !== "New Chat") {
+                loadChatMessages(chatId);
+              }
+            }}
+            onValidateMessages={validateMessagePersistence}
+            chats={chats}
+            user={user}
+          />
+        </ErrorBoundary>
       </div>
     </SidebarProvider>
   );

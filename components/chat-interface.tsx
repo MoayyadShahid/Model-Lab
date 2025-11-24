@@ -140,6 +140,7 @@ interface ChatInterfaceProps {
   onCreateChat: () => void
   onDeleteChat: (chatId: string) => void
   onChangeActiveChat: (chatId: string) => void
+  onValidateMessages?: (chatId: string) => Promise<boolean>
   chats: Chat[]
   user: any
 }
@@ -149,7 +150,8 @@ export function ChatInterface({
   onUpdateChat, 
   onCreateChat, 
   onDeleteChat, 
-  onChangeActiveChat, 
+  onChangeActiveChat,
+  onValidateMessages,
   chats,
   user 
 }: ChatInterfaceProps) {
@@ -160,6 +162,8 @@ export function ChatInterface({
   const loadingMessageIdRef = useRef<string | null>(null)
   const { state: sidebarState, toggleSidebar } = useSidebar()
   const sidebarVisible = sidebarState === "expanded"
+
+  // Removed message flow tracking - too verbose
 
   // Scroll to bottom when messages change
   const scrollToBottom = () => {
@@ -175,8 +179,16 @@ export function ChatInterface({
   const handleSend = async () => {
     if (!input.trim() || !chat) return
 
+    // Generate stable IDs using crypto if available, fallback to timestamp
+    const generateId = () => {
+      if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        return crypto.randomUUID();
+      }
+      return `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    };
+
     const userMessage: Message = {
-      id: Date.now().toString(),
+      id: generateId(),
       role: "user",
       content: input,
       timestamp: new Date(),
@@ -193,30 +205,34 @@ export function ChatInterface({
       updates.title = input.length > 50 ? input.substring(0, 50) + "..." : input
     }
 
+    console.log("Sending user message to updateChat:", userMessage.id);
+
     onUpdateChat(chat.id, updates)
     setInput("")
 
-    // Add loading message
+    // Add loading message with temporary ID
     const loadingMessageId = `loading-${Date.now()}`
     loadingMessageIdRef.current = loadingMessageId
     const loadingMessage: Message = {
       id: loadingMessageId,
       role: "assistant",
-      content: "__LOADING__", // Special marker for loading state
+      content: "__LOADING__",
       timestamp: new Date(),
     }
     
+    console.log("Adding loading message:", loadingMessageId);
+    
+    // Update UI with loading message
     onUpdateChat(chat.id, {
       messages: [...updatedMessages, loadingMessage]
     })
     
     try {
-      // Set loading state
       setIsLoading(true)
       
       // Format messages for the API (exclude loading markers)
       const messagesToSend = updatedMessages
-        .filter(msg => msg.content !== "__LOADING__")
+        .filter(msg => msg.content !== "__LOADING__" && !msg.id.startsWith('loading-'))
         .map(msg => ({
           role: msg.role,
           content: msg.content
@@ -240,6 +256,9 @@ export function ChatInterface({
         throw new Error(`API returned ${response.status}`)
       }
       
+      let finalContent = ''
+      let usageData: any = null
+      
       // Check if response is streaming
       const contentType = response.headers.get('content-type')
       if (contentType?.includes('text/event-stream')) {
@@ -251,31 +270,23 @@ export function ChatInterface({
           throw new Error('No response body')
         }
         
-        // Capture initial messages state (before loading message was added)
-        const initialMessages = updatedMessages
         let buffer = ''
-        let accumulatedContent = ''
-        let usageData: any = null
         
         while (true) {
           const { done, value } = await reader.read()
           
           if (done) break
           
-          // Decode the chunk
           buffer += decoder.decode(value, { stream: true })
           
-          // Process complete SSE messages (lines ending with \n\n)
           const lines = buffer.split('\n\n')
-          buffer = lines.pop() || '' // Keep incomplete line in buffer
+          buffer = lines.pop() || ''
           
           for (const line of lines) {
             if (line.startsWith('data: ')) {
-              const dataStr = line.slice(6) // Remove 'data: ' prefix
+              const dataStr = line.slice(6)
               
-              if (dataStr.trim() === '[DONE]') {
-                continue
-              }
+              if (dataStr.trim() === '[DONE]') continue
               
               try {
                 const data = JSON.parse(dataStr)
@@ -285,80 +296,69 @@ export function ChatInterface({
                 }
                 
                 if (data.type === 'content' && data.content) {
-                  // Accumulate content
-                  accumulatedContent += data.content
+                  finalContent += data.content
                   
-                  // Update the loading message with accumulated content
-                  // Build messages array from initial state + updated loading message
-                  const updatedLoadingMessage: Message = {
+                  // Update loading message with current content for real-time display
+                  const streamingMessage: Message = {
                     ...loadingMessage,
-                    content: accumulatedContent
+                    content: finalContent
                   }
                   
                   onUpdateChat(chat.id, {
-                    messages: [...initialMessages, updatedLoadingMessage]
+                    messages: [...updatedMessages, streamingMessage]
                   })
                 } else if (data.type === 'usage' && data.usage) {
-                  // Store usage data for final message
                   usageData = data.usage
                 }
               } catch (parseError) {
-                // Skip invalid JSON
                 console.warn('Failed to parse SSE data:', parseError)
               }
             }
           }
         }
-        
-        // Replace loading message with final message
-        const finalMessage: Message = {
-          id: Date.now().toString(),
-          role: "assistant",
-          content: accumulatedContent || "No response received",
-          timestamp: new Date(),
-          usage: usageData || undefined
-        }
-        
-        loadingMessageIdRef.current = null
-        
-        onUpdateChat(chat.id, {
-          messages: [...initialMessages, finalMessage]
-        })
       } else {
-        // Fallback to non-streaming response
+        // Non-streaming response
         const data = await response.json()
-        
-        // Create the assistant message with usage data
-        const assistantMessage: Message = {
-          id: Date.now().toString(),
-          role: "assistant",
-          content: data.message.content,
-          timestamp: new Date(),
-          usage: data.usage
-        }
-        
-        // Replace the loading message with the actual response
-        // Use initialMessages (before loading was added)
-        loadingMessageIdRef.current = null
-        
-        onUpdateChat(chat.id, {
-          messages: [...updatedMessages, assistantMessage]
-        })
+        finalContent = data.message.content
+        usageData = data.usage
       }
+      
+      // Create final message with stable ID
+      const finalMessage: Message = {
+        id: generateId(),
+        role: "assistant",
+        content: finalContent || "No response received",
+        timestamp: new Date(),
+        usage: usageData || undefined
+      }
+      
+      console.log("Sending final assistant message to updateChat:", finalMessage.id);
+      
+      // Replace loading message with final message (single update)
+      loadingMessageIdRef.current = null
+      onUpdateChat(chat.id, {
+        messages: [...updatedMessages, finalMessage]
+      })
+      
+      // Validate message persistence after a short delay
+      if (onValidateMessages) {
+        setTimeout(() => {
+          onValidateMessages(chat.id);
+        }, 2000); // Give time for database operations to complete
+      }
+      
     } catch (error) {
       console.error("Error sending message:", error)
       
-      // Replace loading message with error
-      // Use updatedMessages (before loading was added)
+      // Create error message
       const errorMessage: Message = {
-        id: Date.now().toString(),
+        id: generateId(),
         role: "assistant",
         content: `Sorry, there was an error processing your request: ${error instanceof Error ? error.message : 'Unknown error'}`,
         timestamp: new Date(),
       }
       
       loadingMessageIdRef.current = null
-      
       onUpdateChat(chat.id, {
         messages: [...updatedMessages, errorMessage]
       })
