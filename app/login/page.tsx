@@ -40,11 +40,10 @@ export default function LoginPage() {
             </div>
             
             <h2 className="text-4xl font-bold text-gray-900 mb-4">
-              Access Every AI Model in One Place
+              Access The Best AI Models in One Place
             </h2>
             <p className="text-xl text-gray-600 mb-8">
-              Connect with OpenAI, Anthropic, and DeepSeek models through a unified experience.
-              Try different AI models, save your conversations, and explore what works best.
+              Use various AI models, save your conversations, and explore what works best.
             </p>
             
             <div className="bg-white p-6 rounded-lg shadow-lg border border-gray-200">

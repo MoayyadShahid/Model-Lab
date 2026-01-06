@@ -1,8 +1,10 @@
-import { User, Bot } from "lucide-react"
+import { User, Bot, Copy, Check } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Button } from "@/components/ui/button"
 import ReactMarkdown from "react-markdown"
 import type { Message } from "@/lib/types"
 import { LoadingDots } from "@/components/loading-dots"
+import { useState } from "react"
 
 interface ChatMessageProps {
   message: Message
@@ -10,6 +12,17 @@ interface ChatMessageProps {
 
 export function ChatMessage({ message }: ChatMessageProps) {
   const isUser = message.role === "user"
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(message.content)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      console.error("Failed to copy text:", err)
+    }
+  }
 
   return (
     <div 
@@ -75,6 +88,23 @@ export function ChatMessage({ message }: ChatMessageProps) {
                 >
                   {message.content}
                 </ReactMarkdown>
+                
+                {/* Copy button positioned in bottom right, above usage statistics */}
+                <div className="flex justify-end -mt-2 mb-2">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+                    onClick={handleCopy}
+                    title={copied ? "Copied!" : "Copy"}
+                  >
+                    {copied ? (
+                      <Check className="h-4 w-4 text-green-600" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
                 
                 {message.usage && (
                   <div className="mt-4 pt-3 border-t border-gray-200 text-xs text-gray-500">
